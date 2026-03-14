@@ -303,6 +303,36 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
+  // Relay pickedXPath from content script to panel
+  if (msg.type === 'pickedXPath' && sender.tab) {
+    const port = recordingPanelPorts.get(sender.tab.id);
+    if (port) port.postMessage(msg);
+    return false;
+  }
+
+  if (msg.type === 'startPicking') {
+    (async () => {
+      try {
+        const tabId = msg.tabId;
+        const tab = await chrome.tabs.get(tabId);
+        if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('chrome-extension://')) {
+          sendResponse({ error: 'Cannot pick on restricted pages' });
+          return;
+        }
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'ISOLATED',
+          files: ['picker.js'],
+        });
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ error: e.message });
+      }
+    })();
+    return true;
+  }
+
+
   if (msg.type === 'startRecording') {
     (async () => {
       try {

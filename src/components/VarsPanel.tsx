@@ -36,11 +36,9 @@ export default function VarsPanel({ vars, setVars }: Props) {
       <div className="flex-shrink-0 px-3 py-2" style={{ borderBottom: '1px solid var(--panel-border)', background: 'var(--panel-surface)' }}>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Variables</span>
-          <button onClick={openDialog}
-            className="flex items-center justify-center w-5 h-5 rounded-md cursor-pointer transition-all"
-            style={{ background: 'var(--accent-blue-bg)', border: '1px solid var(--accent-blue-border)', color: 'var(--accent-blue)' }}>
+          <Button variant="ghost" size="icon" onClick={openDialog} className="w-5 h-5" style={{ background: 'var(--accent-blue-bg)', border: '1px solid var(--accent-blue-border)', color: 'var(--accent-blue)' }}>
             <HugeiconsIcon icon={AddCircleIcon} size={12} />
-          </button>
+          </Button>
         </div>
         {Object.keys(vars).length === 0 && (
           <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>No variables</div>
@@ -57,11 +55,9 @@ export default function VarsPanel({ vars, setVars }: Props) {
                 className="h-4 w-20 text-[10px] px-1 border-0 bg-transparent p-0 focus-visible:ring-0"
                 style={{ color: 'var(--text-primary)' }}
               />
-              <button onClick={() => setVars(prev => { const n = { ...prev }; delete n[k]; return n; })}
-                className="flex items-center justify-center opacity-40 hover:opacity-100 transition-opacity"
-                style={{ color: 'var(--accent-danger)' }}>
+              <Button variant="ghost" size="icon" onClick={() => setVars(prev => { const n = { ...prev }; delete n[k]; return n; })} className="w-4 h-4 opacity-40 hover:opacity-100" style={{ color: 'var(--accent-danger)' }}>
                 <HugeiconsIcon icon={Delete01Icon} size={10} />
-              </button>
+              </Button>
             </div>
           ))}
         </div>

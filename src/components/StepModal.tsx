@@ -11,9 +11,10 @@ interface Props {
   modal: { step?: Step; index?: number; insertAt?: number };
   onSave: (step: Step) => void;
   onClose: () => void;
+  onPickXPath: (callback: (xpath: string | null) => void) => void;
 }
 
-export default function StepModal({ modal, onSave, onClose }: Props) {
+export default function StepModal({ modal, onSave, onClose, onPickXPath }: Props) {
   const [step, setStep] = useState<Step>(modal.step || { type: modal.step?.type || 'navigate' } as Step);
 
   useEffect(() => {
@@ -67,6 +68,22 @@ export default function StepModal({ modal, onSave, onClose }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
+              ) : f.xpath ? (
+                <div className="flex gap-1">
+                  <Input
+                    value={(step as any)[f.key] || ''}
+                    onChange={e => setField(f.key, e.target.value)}
+                    placeholder={f.placeholder}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Pick element from page"
+                    onClick={() => onPickXPath(xpath => { if (xpath) setField(f.key, xpath); })}
+                  >🎯</Button>
+                </div>
               ) : (
                 <Input
                   value={(step as any)[f.key] || ''}

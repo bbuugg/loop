@@ -53,6 +53,7 @@ export interface FieldDef {
   placeholder?: string;
   type?: 'text' | 'checkbox' | 'select';
   options?: string[];
+  xpath?: true;
 }
 
 export interface SchemaDef {
@@ -63,11 +64,11 @@ export interface SchemaDef {
 export const STEP_SCHEMA: Record<string, SchemaDef> = {
   navigate:    { label: 'Navigate to URL',   fields: [{ key: 'url', label: 'URL', placeholder: 'https://example.com' }, { key: 'hijackWindows', label: 'Hijack new windows', type: 'checkbox' }] },
   refresh:     { label: 'Refresh Page',      fields: [{ key: 'hijackWindows', label: 'Hijack new windows', type: 'checkbox' }] },
-  waitElement: { label: 'Wait for Element',  fields: [{ key: 'selector', label: 'XPath', placeholder: '//button[@id="submit"]' }, { key: 'timeout', label: 'Timeout (ms)', placeholder: '10000' }] },
-  hover:       { label: 'Hover Element',     fields: [{ key: 'selector', label: 'XPath', placeholder: '//nav/ul/li[2]' }] },
-  click:       { label: 'Click Element',     fields: [{ key: 'selector', label: 'XPath', placeholder: '//button[text()="Login"]' }] },
-  type:        { label: 'Type Text',         fields: [{ key: 'selector', label: 'XPath', placeholder: '//input[@name="q"]' }, { key: 'text', label: 'Text', placeholder: 'hello world' }] },
-  extract:     { label: 'Extract Text',      fields: [{ key: 'selector', label: 'XPath', placeholder: '//h1' }, { key: 'attribute', label: 'Attribute (optional)', placeholder: 'href' }, { key: 'saveAs', label: 'Save as variable (optional)', placeholder: 'page' }] },
+  waitElement: { label: 'Wait for Element',  fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//button[@id="submit"]' }, { key: 'timeout', label: 'Timeout (ms)', placeholder: '10000' }] },
+  hover:       { label: 'Hover Element',     fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//nav/ul/li[2]' }] },
+  click:       { label: 'Click Element',     fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//button[text()="Login"]' }] },
+  type:        { label: 'Type Text',         fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//input[@name="q"]' }, { key: 'text', label: 'Text', placeholder: 'hello world' }] },
+  extract:     { label: 'Extract Text',      fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//h1' }, { key: 'attribute', label: 'Attribute (optional)', placeholder: 'href' }, { key: 'saveAs', label: 'Save as variable (optional)', placeholder: 'page' }] },
   setVar:      { label: 'Set Variable',      fields: [{ key: 'varName', label: 'Variable name', placeholder: 'page' }, { key: 'varExpr', label: 'Value or expression', placeholder: 'page + 1' }] },
   scroll:      { label: 'Scroll',            fields: [{ key: 'selector', label: 'XPath (optional)', placeholder: '//div[@class="list"]' }, { key: 'deltaX', label: 'Delta X (px)', placeholder: '0' }, { key: 'deltaY', label: 'Delta Y (px)', placeholder: '300' }] },
   waitMs:      { label: 'Wait (ms)',         fields: [{ key: 'ms', label: 'Milliseconds', placeholder: '1000' }] },

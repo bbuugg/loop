@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
-import { copyFileSync, mkdirSync } from 'fs';
+import { copyFileSync, mkdirSync, readdirSync } from 'fs';
 
 function copyStaticPlugin() {
   return {
@@ -13,10 +13,15 @@ function copyStaticPlugin() {
         'background.js',
         'devtools.html',
         'devtools.js',
+        'picker.js',
       ];
       mkdirSync('./plugin', { recursive: true });
       for (const f of files) {
         copyFileSync(`./${f}`, `./plugin/${f}`);
+      }
+      mkdirSync('./plugin/icons', { recursive: true });
+      for (const f of readdirSync('./icons')) {
+        copyFileSync(`./icons/${f}`, `./plugin/icons/${f}`);
       }
     },
   };

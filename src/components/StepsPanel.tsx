@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { STEP_SCHEMA, stepSummary, type Step } from '../schema';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   PlayIcon, PencilEdit01Icon, Delete01Icon, Copy01Icon,
-  ArrowUp01Icon, ArrowDown01Icon, EyeIcon, EyeOff as EyeOffIcon, AddCircleIcon
+  ArrowUp01Icon, ArrowDown01Icon, EyeIcon, EyeOff as EyeOffIcon,
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 
@@ -115,14 +116,12 @@ export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete,
         <div className="text-[10px] uppercase tracking-widest mb-1.5 px-1" style={{ color: 'var(--text-muted)' }}>Add Step</div>
         <div className="grid grid-cols-2 gap-1">
           {STEP_TYPES.map(type => (
-            <button key={type} onClick={() => onAdd(type)}
-              className="flex items-center gap-1 h-6 px-2 rounded-lg text-[10px] cursor-pointer transition-all text-left"
-              style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-blue-bg)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent-blue-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--accent-blue)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--panel-item-bg)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--panel-item-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}>
+            <Button key={type} size="sm" onClick={() => onAdd(type)}
+              className="justify-start text-[10px] h-6 px-2"
+              style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
               <span>{TYPE_ICON[type] || '•'}</span>
               <span className="truncate">{STEP_SCHEMA[type].label}</span>
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -136,17 +135,15 @@ function InsertPicker({ index, onInsert, onClose }: { index: number; onInsert: (
       <div className="text-[9px] uppercase tracking-widest mb-1 px-0.5" style={{ color: 'var(--text-muted)' }}>Insert at position {index + 1}</div>
       <div className="grid grid-cols-2 gap-1">
         {Object.keys(STEP_SCHEMA).map(type => (
-          <button key={type} onClick={() => { onInsert(index, type); onClose(); }}
-            className="flex items-center gap-1 h-6 px-2 rounded-lg text-[10px] cursor-pointer transition-all text-left"
-            style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--accent-blue-bg)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--panel-item-bg)'; }}>
+          <Button key={type} size="sm" onClick={() => { onInsert(index, type); onClose(); }}
+            className="justify-start text-[10px] h-6 px-2"
+            style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
             <span>{TYPE_ICON[type] || '•'}</span>
             <span className="truncate">{STEP_SCHEMA[type].label}</span>
-          </button>
+          </Button>
         ))}
       </div>
-      <button onClick={onClose} className="mt-1 text-[9px] w-full text-center cursor-pointer" style={{ color: 'var(--text-muted)' }}>cancel</button>
+      <Button variant="ghost" size="sm" onClick={onClose} className="mt-1 text-[9px] w-full" style={{ color: 'var(--text-muted)' }}>cancel</Button>
     </div>
   );
 }
@@ -155,11 +152,15 @@ function IconBtn({ title, onClick, danger, children }: { title: string; onClick:
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button onClick={e => { e.stopPropagation(); onClick(); }}
-          className="w-5 h-5 flex items-center justify-center rounded-md cursor-pointer transition-all"
-          style={{ color: danger ? 'var(--accent-danger)' : 'var(--text-secondary)' }}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={e => { e.stopPropagation(); onClick(); }}
+          className="w-5 h-5"
+          style={{ color: danger ? 'var(--accent-danger)' : 'var(--text-secondary)' }}
+        >
           {children}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent><p>{title}</p></TooltipContent>
     </Tooltip>

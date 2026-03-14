@@ -58,6 +58,7 @@ export default function App() {
   const portRef = useRef<chrome.runtime.Port | null>(null);
   const loopRef = useRef(false);
   loopRef.current = loop;
+  const pickXPathCallbackRef = useRef<((xpath: string | null) => void) | null>(null);
 
   const addLog = useCallback((text: string, level: LogEntry['level'] = 'info') => {
     setLogs(prev => [...prev, { text, level, time: ts() }]);
@@ -200,18 +201,32 @@ export default function App() {
     setRunning(false);
   }
 
+  // ── Port message handler ──
+  function handlePortMessage(msg: any) {
+    if (msg.type === 'recordedStep') {
+      setSteps(prev => [...prev, msg.step]);
+      addLog(`Recorded: ${STEP_SCHEMA[msg.step.type]?.label || msg.step.type}`, 'warn');
+    }
+    if (msg.type === 'pickedXPath') {
+      const cb = pickXPathCallbackRef.current;
+      pickXPathCallbackRef.current = null;
+      if (cb) cb(msg.xpath);
+    }
+  }
+
+  function getOrCreatePort(): chrome.runtime.Port {
+    if (portRef.current) return portRef.current;
+    const p = chrome.runtime.connect({ name: `crawler-panel-${tabId}` });
+    portRef.current = p;
+    p.onMessage.addListener(handlePortMessage);
+    p.onDisconnect.addListener(() => { portRef.current = null; });
+    return p;
+  }
+
   // ── Record ──
   async function toggleRecord() {
     if (!recording) {
-      const p = chrome.runtime.connect({ name: `crawler-panel-${tabId}` });
-      portRef.current = p;
-      p.onMessage.addListener((msg: any) => {
-        if (msg.type === 'recordedStep') {
-          setSteps(prev => [...prev, msg.step]);
-          addLog(`Recorded: ${STEP_SCHEMA[msg.step.type]?.label || msg.step.type}`, 'warn');
-        }
-      });
-      p.onDisconnect.addListener(() => { portRef.current = null; });
+      const p = getOrCreatePort();
       try {
         await sendMsg({ type: 'startRecording', tabId });
         setRecording(true);
@@ -227,6 +242,19 @@ export default function App() {
       portRef.current = null;
       setRecording(false);
       addLog('Recording stopped.', 'info');
+    }
+  }
+
+  // ── XPath Picker ──
+  async function startPickXPath(callback: (xpath: string | null) => void) {
+    try {
+      getOrCreatePort();
+      pickXPathCallbackRef.current = callback;
+      await sendMsg({ type: 'startPicking', tabId });
+      addLog('Click an element on the page to pick its XPath. Press ESC to cancel.', 'info');
+    } catch (e: any) {
+      pickXPathCallbackRef.current = null;
+      addLog(`Picker failed: ${e.message}`, 'err');
     }
   }
 
@@ -287,6 +315,20 @@ export default function App() {
     reader.readAsText(file);
   }
 
+  const [folderFiles, setFolderFiles] = useState<File[]>([]);
+
+  function openFolder(files: FileList) {
+    const jsons = Array.from(files)
+      .filter(f => f.name.endsWith('.json'))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    setFolderFiles(jsons);
+    addLog(`Found ${jsons.length} JSON file(s).`, 'info');
+  }
+
+  function importFromFolder(file: File) {
+    importJSON(file);
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-col h-screen overflow-hidden text-[11px]">
@@ -298,6 +340,9 @@ export default function App() {
           onClearLog={() => setLogs([])}
           onExport={exportJSON}
           onImport={importJSON}
+          folderFiles={folderFiles}
+          onOpenFolder={openFolder}
+          onImportFromFolder={importFromFolder}
         />
         <div className="flex flex-1 overflow-hidden">
           <StepsPanel
@@ -317,6 +362,7 @@ export default function App() {
             modal={modal}
             onSave={saveStep}
             onClose={() => setModal(null)}
+            onPickXPath={startPickXPath}
           />
         )}
       </div>
