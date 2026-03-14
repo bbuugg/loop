@@ -40,18 +40,34 @@
       <button data-type="click">Click</button>
       <button data-type="type">Type</button>
       <button data-type="extract">Extract</button>
-      <button data-type="waitMs">Wait ms</button>
+      <button data-type="setVar">Set Var</button>
+      <button data-type="scroll">Scroll</button>
+<button data-type="waitMs">Wait ms</button>
       <button data-type="screenshot">Screenshot</button>
     </div>
   </div>
 
-  <!-- Log panel -->
-  <div id="log-panel">
-    <div id="log-header">
-      <span>Log</span>
-      <span id="log-count">0 entries</span>
+  <!-- Right column: vars + log stacked -->
+  <div id="right-col">
+
+    <!-- Variables panel -->
+    <div id="vars-panel">
+      <div id="vars-header">
+        <span>Variables</span>
+        <button id="btn-add-var" title="Add variable">+</button>
+      </div>
+      <div id="vars-list"></div>
     </div>
-    <div id="log-output"></div>
+
+    <!-- Log panel -->
+    <div id="log-panel">
+      <div id="log-header">
+        <span>Log</span>
+        <span id="log-count">0 entries</span>
+      </div>
+      <div id="log-output"></div>
+    </div>
+
   </div>
 
 </div>
@@ -68,6 +84,14 @@
   </div>
 </div>
 
+<script src="panel-schema.js"></script>
+<script src="panel-log.js"></script>
+<script src="panel-vars.js"></script>
+<script src="panel-modal.js"></script>
+<script src="panel-steps.js"></script>
+<script src="panel-runner.js"></script>
+<script src="panel-record.js"></script>
+<script src="panel-io.js"></script>
 <script src="panel.js"></script>
 </body>
 </html>

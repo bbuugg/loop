@@ -9,7 +9,7 @@ A Chrome extension that adds a **Loop** panel inside DevTools (F12). Build, reco
 1. Open Chrome and navigate to `chrome://extensions`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select the `crawler/` folder
+4. Select the folder
 5. Open any webpage, press **F12**, and click the **Loop** tab
 
 > The extension requires access to the debugger API. Chrome will show a banner at the top of the page while the debugger is attached — this is normal.
@@ -43,7 +43,9 @@ A Chrome extension that adds a **Loop** panel inside DevTools (F12). Build, reco
 | **Hover Element** | Move the mouse to an element and dispatch `mouseover`/`mouseenter`/`mousemove` events |
 | **Click Element** | Click an element using CDP mouse events |
 | **Type Text** | Focus an input element and type text character by character |
-| **Extract** | Extract an element's text content or a specific attribute value |
+| **Extract** | Extract an element's text content or a specific attribute value. Optionally save the result to a variable via **Save as variable** field |
+| **Set Variable** | Set or update a global variable by name. Accepts a literal value or a JavaScript expression (e.g. `page + 1`) |
+| **Scroll** | Scroll a page or element by a given pixel delta (X and Y) |
 | **Wait ms** | Pause execution for a fixed number of milliseconds |
 | **Screenshot** | Capture a PNG screenshot, displayed inline in the log |
 
@@ -73,9 +75,7 @@ All element-targeting steps use **XPath** selectors.
 ## Recording Steps
 
 1. Click **● Record** to start recording
-2. Click elements on the inspected page — each click automatically generates:
-   - A **Hover** step for the last element hovered before the click
-   - A **Click** step for the clicked element
+2. Click elements on the inspected page — each click automatically generates a **Click** step
 3. Click **⏹ Stop Rec** to stop recording
 
 Recorded steps are appended to the current step list and can be edited or reordered.
@@ -182,11 +182,75 @@ Supported fields per type:
 | `hover` | `selector` |
 | `click` | `selector` |
 | `type` | `selector`, `text` |
-| `extract` | `selector`, `attribute` (empty = text content) |
+| `extract` | `selector`, `attribute` (empty = text content), `saveAs` (variable name) |
+| `setVar` | `varName`, `varExpr` |
+| `scroll` | `selector` (optional), `deltaX`, `deltaY` |
 | `waitMs` | `ms` |
 | `screenshot` | *(none)* |
 
-All steps optionally accept a `name` string and a `disabled` boolean.
+All steps optionally accept a `name` string, a `disabled` boolean, an `onError` string (`stop`, `continue`, or `goto`), and an `onErrorGoto` step ID.
+
+---
+
+## Variables
+
+The **Variables panel** (between the steps list and log) lets you define global variables that can be referenced in any step field using `{varName}` syntax.
+
+### Defining Variables
+
+- Click **+** in the Variables panel header and enter a variable name (letters, digits, underscores only)
+- Edit the value directly in the input field
+- Click **✕** to delete a variable
+
+### Using Variables in Steps
+
+Any step field supports `{varName}` substitution:
+
+```
+Navigate URL:  https://example.com/page/{page}
+Type text:     {username}
+XPath:         //li[{index}]
+```
+
+### Set Variable Step
+
+Use **Set Var** to update a variable during execution:
+
+| Field | Example | Description |
+|-------|---------|-------------|
+| Variable name | `page` | Name of the variable to set |
+| Value or expression | `1` | Set to a literal value |
+| Value or expression | `page + 1` | Increment current value |
+| Value or expression | `"https://example.com/" + page` | String concatenation |
+| Value or expression | `page > 5 ? "done" : "continue"` | Conditional |
+
+Expressions are evaluated as JavaScript. All current variable names are available directly in the expression scope.
+
+### Extract to Variable
+
+The **Extract** step has a **Save as variable** field. When filled, the extracted value is stored in that variable after execution:
+
+```json
+{
+  "type": "extract",
+  "selector": "//span[@class=\"page-num\"]",
+  "saveAs": "page"
+}
+```
+
+### Variables in Export/Import
+
+Variables are saved alongside steps in the exported JSON:
+
+```json
+{
+  "steps": [ ... ],
+  "vars": {
+    "page": "1",
+    "username": "admin"
+  }
+}
+```
 
 ---
 

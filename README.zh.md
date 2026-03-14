@@ -9,7 +9,7 @@ Loop 是一个 Chrome 扩展，在 DevTools（F12）中添加 **Loop** 面板，
 1. 打开 Chrome，访问 `chrome://extensions`
 2. 开启右上角的**开发者模式**
 3. 点击**加载已解压的扩展程序**
-4. 选择 `crawler/` 文件夹
+4. 选择文件夹
 5. 打开任意网页，按 **F12** 打开 DevTools，点击 **Loop** 标签页
 
 > 扩展需要调试器权限。调试器附加时 Chrome 会在页面顶部显示提示横幅，这是正常现象。
@@ -40,7 +40,9 @@ Loop 是一个 Chrome 扩展，在 DevTools（F12）中添加 **Loop** 面板，
 | **悬停元素** | 将鼠标移到元素上，触发 mouseover / mouseenter / mousemove 事件 |
 | **点击元素** | 通过 CDP 鼠标事件点击元素 |
 | **输入文本** | 聚焦输入框并逐字符输入文本 |
-| **提取内容** | 提取元素的文本内容或指定属性值 |
+| **提取内容** | 提取元素的文本内容或指定属性值，可通过 **Save as variable** 字段将结果保存为变量 |
+| **设置变量** | 设置或更新全局变量，支持字面量或 JavaScript 表达式（如 `page + 1`） |
+| **滚动** | 按指定像素滚动页面或元素（X/Y 方向） |
 | **等待毫秒** | 暂停执行指定毫秒数 |
 | **截图** | 截取 PNG 截图，内嵌显示在日志中 |
 
@@ -182,11 +184,67 @@ Loop 是一个 Chrome 扩展，在 DevTools（F12）中添加 **Loop** 面板，
 | `hover` | `selector` |
 | `click` | `selector` |
 | `type` | `selector`、`text` |
-| `extract` | `selector`、`attribute`（空 = 文本内容） |
+| `extract` | `selector`、`attribute`（空 = 文本内容）、`saveAs`（变量名） |
+| `setVar` | `varName`、`varExpr` |
+| `scroll` | `selector`（可选）、`deltaX`、`deltaY` |
 | `waitMs` | `ms` |
 | `screenshot` | 无 |
 
-所有步骤可选填 `name`（字符串）和 `disabled`（布尔值）。
+所有步骤可选填 `name`（字符串）、`disabled`（布尔值）、`onError`（`stop` / `continue` / `goto`）、`onErrorGoto`（目标步骤 ID）。
+
+---
+
+## 全局变量
+
+**变量面板**（位于步骤列表和日志之间）用于定义全局变量，可在任意步骤字段中通过 `{变量名}` 引用。
+
+### 定义变量
+
+- 点击变量面板标题栏的 **+** 按钮，输入变量名（字母、数字、下划线）
+- 直接在输入框中编辑变量值
+- 点击 **✕** 删除变量
+
+### 在步骤中使用变量
+
+任意步骤字段均支持 `{变量名}` 替换：
+
+```
+Navigate URL:  https://example.com/page/{page}
+输入文本:       {username}
+XPath:         //li[{index}]
+```
+
+### 设置变量步骤（Set Var）
+
+在执行过程中动态修改变量值：
+
+| 字段 | 示例 | 说明 |
+|------|------|------|
+| 变量名 | `page` | 要设置的变量名 |
+| 值或表达式 | `1` | 设置为固定值 |
+| 值或表达式 | `page + 1` | 在当前值基础上加 1 |
+| 值或表达式 | `"https://example.com/" + page` | 字符串拼接 |
+| 值或表达式 | `page > 5 ? "done" : "continue"` | 条件表达式 |
+
+表达式为标准 JavaScript，所有已定义变量均可直接引用。
+
+### 提取内容并存为变量（Extract + Save as variable）
+
+在 Extract 步骤的 **Save as variable** 字段填入变量名，提取结果会自动写入该变量，变量面板实时更新。
+
+### 导出与导入
+
+JSON 文件同时保存步骤列表和变量：
+
+```json
+{
+  "steps": [...],
+  "vars": {
+    "page": "1",
+    "username": "admin"
+  }
+}
+```
 
 ---
 

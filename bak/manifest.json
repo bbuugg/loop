@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Loop",
+  "version": "1.0.0",
+  "description": "DevTools panel automation — build, run, and record step sequences on any page",
+  "permissions": ["debugger", "tabs", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "devtools_page": "devtools.html"
+}
