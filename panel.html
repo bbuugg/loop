@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Crawler</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+
+<!-- Top toolbar -->
+<div id="toolbar">
+  <button id="btn-run" class="primary">&#9654; Run</button>
+  <label class="loop-label"><input type="checkbox" id="chk-loop"> Loop</label>
+  <div class="sep"></div>
+  <button id="btn-record" class="record-btn">&#9679; Record</button>
+  <div class="sep"></div>
+  <button id="btn-clear-steps">Clear Steps</button>
+  <button id="btn-clear-log">Clear Log</button>
+  <div class="sep"></div>
+  <button id="btn-export">Export JSON</button>
+  <button id="btn-import">Import JSON</button>
+  <input type="file" id="file-import" accept=".json" style="display:none">
+</div>
+
+<!-- Main area -->
+<div id="main">
+
+  <!-- Steps panel -->
+  <div id="steps-panel">
+    <div id="steps-header">
+      <span>Steps</span>
+      <span id="steps-count">0 steps</span>
+    </div>
+    <div id="steps-list"></div>
+    <div id="add-step-bar">
+      <button data-type="navigate">Navigate</button>
+      <button data-type="refresh">Refresh</button>
+      <button data-type="waitElement">Wait El</button>
+      <button data-type="hover">Hover</button>
+      <button data-type="click">Click</button>
+      <button data-type="type">Type</button>
+      <button data-type="extract">Extract</button>
+      <button data-type="waitMs">Wait ms</button>
+      <button data-type="screenshot">Screenshot</button>
+    </div>
+  </div>
+
+  <!-- Log panel -->
+  <div id="log-panel">
+    <div id="log-header">
+      <span>Log</span>
+      <span id="log-count">0 entries</span>
+    </div>
+    <div id="log-output"></div>
+  </div>
+
+</div>
+
+<!-- Step config modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h3 id="modal-title">Configure Step</h3>
+    <div id="modal-fields"></div>
+    <div id="modal-buttons">
+      <button id="modal-cancel">Cancel</button>
+      <button id="modal-ok" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="panel.js"></script>
+</body>
+</html>
