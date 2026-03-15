@@ -3,6 +3,11 @@
 const attachedTabs = new Set();
 const abortedTabs = new Set();
 
+// Open side panel when toolbar icon is clicked
+chrome.action.onClicked.addListener(tab => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
 function sendCommand(tabId, method, params = {}) {
   return new Promise((resolve, reject) => {
     chrome.debugger.sendCommand({ tabId }, method, params, result => {
@@ -281,6 +286,13 @@ chrome.runtime.onConnect.addListener(port => {
 
 // Single unified message listener
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+
+  if (msg.type === 'getActiveTab') {
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, tabs => {
+      sendResponse({ tabId: tabs[0]?.id || 0 });
+    });
+    return true;
+  }
 
   if (msg.type === 'attachDebugger') {
     ensureAttached(msg.tabId)

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { STEP_SCHEMA, stepSummary, generateId, type Step, type Vars, type LogEntry } from './schema';
 import Toolbar from './components/Toolbar';
@@ -7,9 +7,6 @@ import VarsPanel from './components/VarsPanel';
 import LogPanel from './components/LogPanel';
 import StepModal from './components/StepModal';
 
-const tabId: number = typeof chrome !== 'undefined' && chrome.devtools
-  ? chrome.devtools.inspectedWindow.tabId
-  : 0;
 
 function sendMsg(msg: object): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -46,9 +43,28 @@ function evalExpr(expr: string, vars: Vars): string {
 }
 
 export default function App() {
+  const [tabId, setTabId]           = useState<number>(0);
   const [steps, setSteps]           = useState<Step[]>([]);
   const [vars, setVars]             = useState<Vars>({});
-  const [logs, setLogs]             = useState<LogEntry[]>([{ text: `Loop ready — tab ${tabId}`, level: 'info', time: ts() }]);
+  const [logs, setLogs]             = useState<LogEntry[]>([{ text: 'Loop ready', level: 'info', time: ts() }]);
+
+  useEffect(() => {
+    function refreshTabId() {
+      chrome.runtime.sendMessage({ type: 'getActiveTab' }, res => {
+        if (res?.tabId) setTabId(res.tabId);
+      });
+    }
+    refreshTabId();
+    chrome.tabs.onActivated.addListener(refreshTabId);
+    return () => chrome.tabs.onActivated.removeListener(refreshTabId);
+  }, []);
+
+  // Reconnect port when tabId changes
+  useEffect(() => {
+    if (!tabId) return;
+    portRef.current?.disconnect();
+    portRef.current = null;
+  }, [tabId]);
   const [running, setRunning]       = useState(false);
   const [loop, setLoop]             = useState(false);
   const [recording, setRecording]   = useState(false);
