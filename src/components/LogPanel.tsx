@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import type { LogEntry } from '../schema';
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -17,10 +16,11 @@ const LEVEL_DOT: Record<string, React.CSSProperties> = {
 };
 
 export default function LogPanel({ logs }: { logs: LogEntry[] }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [logs]);
 
   return (
@@ -28,7 +28,7 @@ export default function LogPanel({ logs }: { logs: LogEntry[] }) {
       <div className="flex-shrink-0 px-3 py-1.5" style={{ borderBottom: '1px solid var(--panel-border)' }}>
         <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Log</span>
       </div>
-      <ScrollArea className="flex-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         <div className="px-3 py-2 flex flex-col gap-0.5">
           {logs.map((entry, i) => (
             <div key={i} className="flex items-baseline gap-2">
@@ -37,9 +37,8 @@ export default function LogPanel({ logs }: { logs: LogEntry[] }) {
               <span className="text-[11px] break-all" style={{ color: LEVEL_COLOR[entry.level] || LEVEL_COLOR.info }}>{entry.text}</span>
             </div>
           ))}
-          <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

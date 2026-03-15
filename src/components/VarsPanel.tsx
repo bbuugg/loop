@@ -64,7 +64,7 @@ export default function VarsPanel({ vars, setVars }: Props) {
       </div>
 
       <Dialog open={open} onOpenChange={o => { if (!o) setOpen(false); }}>
-        <DialogContent className="max-w-[280px]">
+        <DialogContent className="max-w-[280px]" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Add Variable</DialogTitle>
           </DialogHeader>

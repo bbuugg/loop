@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { STEP_SCHEMA, stepSummary, type Step } from '../schema';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   PlayIcon, PencilEdit01Icon, Delete01Icon, Copy01Icon,
-  ArrowUp01Icon, ArrowDown01Icon, EyeIcon, EyeOff as EyeOffIcon,
+  ArrowUp01Icon, ArrowDown01Icon, EyeIcon, EyeOff as EyeOffIcon, AddCircleIcon,
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
 
@@ -33,19 +34,25 @@ interface Props {
 
 export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete, onMove, onDuplicate, onRunOne, onToggleDisabled, onInsert }: Props) {
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
   return (
-    <div className="flex flex-col flex-shrink-0 overflow-hidden" style={{ width: '260px', borderRight: '1px solid var(--panel-border)', background: 'var(--panel-surface)' }}>
+    <div className="flex flex-col flex-shrink-0 overflow-hidden min-h-0" style={{ width: '260px', borderRight: '1px solid var(--panel-border)', background: 'var(--panel-surface)' }}>
 
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0" style={{ borderBottom: '1px solid var(--panel-border)' }}>
         <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Steps</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--panel-item-bg)', color: 'var(--text-muted)' }}>{steps.length}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--panel-item-bg)', color: 'var(--text-muted)' }}>{steps.length}</span>
+          <Button variant="ghost" size="icon" className="w-5 h-5" onClick={() => setAddOpen(true)} title="Add step">
+            <HugeiconsIcon icon={AddCircleIcon} size={13} />
+          </Button>
+        </div>
       </div>
 
       {/* List */}
-      <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-1 p-1.5">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+        <div className="flex flex-col gap-1 p-1.5 w-full min-w-0">
           {steps.length === 0 && (
             <div className="text-center py-8 text-[11px]" style={{ color: 'var(--text-muted)' }}>No steps</div>
           )}
@@ -59,7 +66,7 @@ export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete,
             return (
               <React.Fragment key={i}>
               <div
-                className={cn('group flex flex-col rounded-xl px-2.5 py-2 cursor-pointer transition-all', step.disabled && 'opacity-40')}
+                className={cn('group flex flex-col rounded-xl px-2.5 py-2 cursor-pointer transition-all min-w-0 overflow-hidden', step.disabled && 'opacity-40')}
                 style={{
                   background: state === 'running' ? 'var(--accent-blue-bg)'
                     : state === 'done'    ? 'rgba(52,211,153,0.08)'
@@ -87,7 +94,7 @@ export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete,
                 )}
 
                 {/* Action buttons — show on hover */}
-                <div className="hidden group-hover:flex items-center gap-0.5 rounded-lg px-1 py-0.5 mt-1 self-end flex-wrap"
+                <div className="flex items-center gap-0.5 rounded-lg px-1 py-0.5 mt-0 flex-wrap w-full opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-100"
                   style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)' }}>
                   <IconBtn title="Insert before" onClick={() => setInsertingAt(i)}>↑+</IconBtn>
                   <IconBtn title="Insert after" onClick={() => setInsertingAt(i + 1)}>↓+</IconBtn>
@@ -109,22 +116,24 @@ export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete,
             );
           })}
         </div>
-      </ScrollArea>
-
-      {/* Add step buttons */}
-      <div className="flex-shrink-0 p-1.5" style={{ borderTop: '1px solid var(--panel-border)' }}>
-        <div className="text-[10px] uppercase tracking-widest mb-1.5 px-1" style={{ color: 'var(--text-muted)' }}>Add Step</div>
-        <div className="grid grid-cols-2 gap-1">
-          {STEP_TYPES.map(type => (
-            <Button key={type} size="sm" onClick={() => onAdd(type)}
-              className="justify-start text-[10px] h-6 px-2"
-              style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-              <span>{TYPE_ICON[type] || '•'}</span>
-              <span className="truncate">{STEP_SCHEMA[type].label}</span>
-            </Button>
-          ))}
-        </div>
       </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Add Step</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-1.5 pt-1">
+            {STEP_TYPES.map(type => (
+              <Button key={type} size="sm" variant="outline" onClick={() => { onAdd(type); setAddOpen(false); }}
+                className="justify-start text-[11px] h-8 px-2.5">
+                <span>{TYPE_ICON[type] || '•'}</span>
+                <span className="truncate">{STEP_SCHEMA[type].label}</span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

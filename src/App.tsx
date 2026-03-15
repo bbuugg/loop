@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { STEP_SCHEMA, stepSummary, type Step, type Vars, type LogEntry } from './schema';
+import { STEP_SCHEMA, stepSummary, generateId, type Step, type Vars, type LogEntry } from './schema';
 import Toolbar from './components/Toolbar';
 import StepsPanel from './components/StepsPanel';
 import VarsPanel from './components/VarsPanel';
@@ -66,7 +66,7 @@ export default function App() {
 
   // ── Steps ──
   function addStep(type: string) {
-    setModal({ step: { type } as Step });
+    setModal({ step: { type, id: generateId() } as Step });
   }
 
   function editStep(index: number) {
@@ -85,7 +85,7 @@ export default function App() {
   }
 
   function insertStep(insertAt: number, type: string) {
-    setModal({ step: { type } as Step, insertAt });
+    setModal({ step: { type, id: generateId() } as Step, insertAt });
   }
 
   function deleteStep(index: number) {
@@ -105,7 +105,7 @@ export default function App() {
   function duplicateStep(index: number) {
     setSteps(prev => {
       const a = [...prev];
-      a.splice(index + 1, 0, { ...a[index] });
+      a.splice(index + 1, 0, { ...a[index], id: generateId() });
       return a;
     });
   }
@@ -204,7 +204,7 @@ export default function App() {
   // ── Port message handler ──
   function handlePortMessage(msg: any) {
     if (msg.type === 'recordedStep') {
-      setSteps(prev => [...prev, msg.step]);
+      setSteps(prev => [...prev, { ...msg.step, id: msg.step.id || generateId() }]);
       addLog(`Recorded: ${STEP_SCHEMA[msg.step.type]?.label || msg.step.type}`, 'warn');
     }
     if (msg.type === 'pickedXPath') {
@@ -307,7 +307,7 @@ export default function App() {
     reader.onload = e => {
       try {
         const { steps: s, vars: v } = JSON.parse(e.target!.result as string);
-        if (Array.isArray(s)) setSteps(s);
+        if (Array.isArray(s)) setSteps(s.map((st: Step) => st.id ? st : { ...st, id: generateId() }));
         if (v && typeof v === 'object') setVars(v);
         addLog('Imported.', 'ok');
       } catch { addLog('Import failed.', 'err'); }
@@ -360,6 +360,7 @@ export default function App() {
         {modal && (
           <StepModal
             modal={modal}
+            steps={steps}
             onSave={saveStep}
             onClose={() => setModal(null)}
             onPickXPath={startPickXPath}
