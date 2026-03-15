@@ -204,7 +204,21 @@ export default function App() {
   // ── Port message handler ──
   function handlePortMessage(msg: any) {
     if (msg.type === 'recordedStep') {
-      setSteps(prev => [...prev, { ...msg.step, id: msg.step.id || generateId() }]);
+      const newStep = { ...msg.step, id: msg.step.id || generateId() };
+      if (msg.replaceKey) {
+        setSteps(prev => {
+          const idx = [...prev].reverse().findIndex(s => s.type === newStep.type && (s as any)._replaceKey === msg.replaceKey);
+          if (idx !== -1) {
+            const realIdx = prev.length - 1 - idx;
+            const updated = [...prev];
+            updated[realIdx] = { ...newStep, _replaceKey: msg.replaceKey };
+            return updated;
+          }
+          return [...prev, { ...newStep, _replaceKey: msg.replaceKey }];
+        });
+      } else {
+        setSteps(prev => [...prev, newStep]);
+      }
       addLog(`Recorded: ${STEP_SCHEMA[msg.step.type]?.label || msg.step.type}`, 'warn');
     }
     if (msg.type === 'pickedXPath') {
@@ -295,7 +309,8 @@ export default function App() {
 
   // ── IO ──
   function exportJSON() {
-    const data = JSON.stringify({ steps, vars }, null, 2);
+    const clean = steps.map(({ _replaceKey, ...s }) => s);
+    const data = JSON.stringify({ steps: clean, vars }, null, 2);
     const a = document.createElement('a');
     a.href = `data:application/json,${encodeURIComponent(data)}`;
     a.download = 'loop-steps.json';

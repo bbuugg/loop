@@ -375,7 +375,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               return getXPath(parent) + '/' + part;
             }
             document.addEventListener('click', function crawlerClick(e) {
+              const tag = e.target.tagName;
+              // Skip clicks on input/textarea/select — those are handled by the input recorder
+              if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
               chrome.runtime.sendMessage({ type: 'recordedStep', step: { type: 'click', selector: getXPath(e.target) } });
+            }, true);
+            // Text input recording: emit a 'type' step on blur/change with the final value
+            window.__crawlerLastInputXPath = null;
+            window.__crawlerLastInputTimer = null;
+            function flushInput(el) {
+              const xpath = getXPath(el);
+              const tag = el.tagName;
+              if (tag === 'SELECT') {
+                chrome.runtime.sendMessage({ type: 'recordedStep', step: { type: 'click', selector: xpath } });
+              } else {
+                const text = el.value;
+                if (text) chrome.runtime.sendMessage({ type: 'recordedStep', step: { type: 'type', selector: xpath, text }, replaceKey: xpath });
+              }
+              window.__crawlerLastInputXPath = null;
+            }
+            document.addEventListener('input', function crawlerInput(e) {
+              const el = e.target;
+              const tag = el.tagName;
+              if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+              window.__crawlerLastInputXPath = getXPath(el);
+              clearTimeout(window.__crawlerLastInputTimer);
+              window.__crawlerLastInputTimer = setTimeout(() => flushInput(el), 600);
+            }, true);
+            document.addEventListener('change', function crawlerChange(e) {
+              const el = e.target;
+              if (el.tagName !== 'SELECT') return;
+              flushInput(el);
+            }, true);
+            document.addEventListener('blur', function crawlerBlur(e) {
+              const el = e.target;
+              const tag = el.tagName;
+              if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+              clearTimeout(window.__crawlerLastInputTimer);
+              if (el.value) flushInput(el);
             }, true);
           }
         });
