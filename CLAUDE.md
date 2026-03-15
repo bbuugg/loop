@@ -1,4 +1,4 @@
-# Loop — Chrome DevTools Extension
+# Loop — Chrome Extension (Side Panel + DevTools)
 
 ## Project Structure
 

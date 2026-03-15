@@ -1,6 +1,6 @@
-# Loop — Chrome DevTools Panel Extension
+# Loop — Chrome Extension
 
-A Chrome extension that adds a **Loop** panel inside DevTools (F12). Build, record, and replay automation step sequences on any webpage.
+A Chrome extension for browser automation. Build, record, and replay step sequences on any webpage — accessible from the **Side Panel** (no DevTools required) or as a **DevTools panel**.
 
 ---
 
@@ -9,8 +9,11 @@ A Chrome extension that adds a **Loop** panel inside DevTools (F12). Build, reco
 1. Open Chrome and navigate to `chrome://extensions`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked**
-4. Select the folder
-5. Open any webpage, press **F12**, and click the **Loop** tab
+4. Select the `plugin/` folder
+5. Navigate to any webpage
+6. Click the **Loop** icon in the Chrome toolbar to open the Side Panel
+
+> Alternatively, press **F12** and click the **Loop** tab to use it as a DevTools panel.
 
 > The extension requires access to the debugger API. Chrome will show a banner at the top of the page while the debugger is attached — this is normal.
 
@@ -79,7 +82,7 @@ For any step that requires an XPath selector, you can pick the element visually 
 
 1. Open the step modal (add or edit a step with an XPath field)
 2. Click the **🎯** button next to the XPath input
-3. The DevTools panel minimizes and the page enters pick mode — elements highlight as you hover
+3. The panel minimizes and the page enters pick mode — elements highlight as you hover
 4. Click the target element — its XPath is automatically generated and filled into the field
 5. Press **Escape** to cancel picking without selecting
 

@@ -87,19 +87,27 @@ async function clickElement(tabId, xpath, timeout = 10000) {
       returnByValue: true
     });
     if (result.result.value) {
-      const { x, y, blocked, cssX, cssY } = result.result.value;
-      if (blocked) {
-        // Overlapping element detected — use JS click which always targets the element directly
-        await sendCommand(tabId, 'Runtime.evaluate', {
-          expression: `(${xpathExpr(xpath)}).click()`,
-          returnByValue: false
-        });
-      } else {
-        for (const type of ['mousePressed', 'mouseReleased']) {
-          await sendCommand(tabId, 'Input.dispatchMouseEvent', {
-            type, x, y, button: 'left', clickCount: 1
+      const { x, y, cssX, cssY } = result.result.value;
+      // Dispatch full JS event sequence on the element (works for React/Vue synthetic events)
+      await sendCommand(tabId, 'Runtime.evaluate', {
+        expression: `(() => {
+          const el = ${xpathExpr(xpath)};
+          if (!el) return;
+          ['mouseover','mouseenter','mousemove','mousedown','mouseup','click'].forEach(type => {
+            el.dispatchEvent(new MouseEvent(type, {
+              bubbles: true, cancelable: true, view: window,
+              clientX: ${cssX}, clientY: ${cssY}
+            }));
           });
-        }
+        })()`,
+        returnByValue: false
+      });
+      // Also send CDP mouse events for native browser handling
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await sendCommand(tabId, 'Input.dispatchMouseEvent', {
+          type, x, y, button: 'left', clickCount: 1,
+          modifiers: 0
+        });
       }
       return;
     }
