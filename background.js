@@ -71,16 +71,30 @@ async function clickElement(tabId, xpath, timeout = 10000) {
         if (!el) return null;
         el.scrollIntoView({ block: 'center' });
         const r = el.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        const dpr = window.devicePixelRatio || 1;
+        const cx = (r.left + r.width / 2);
+        const cy = (r.top + r.height / 2);
+        // Check if the element at this point is the target or a descendant
+        const top = document.elementFromPoint(cx, cy);
+        const blocked = top && !el.contains(top) && top !== el;
+        return { x: cx * dpr, y: cy * dpr, blocked, cssX: cx, cssY: cy };
       })()`,
       returnByValue: true
     });
     if (result.result.value) {
-      const { x, y } = result.result.value;
-      for (const type of ['mousePressed', 'mouseReleased']) {
-        await sendCommand(tabId, 'Input.dispatchMouseEvent', {
-          type, x, y, button: 'left', clickCount: 1
+      const { x, y, blocked, cssX, cssY } = result.result.value;
+      if (blocked) {
+        // Overlapping element detected — use JS click which always targets the element directly
+        await sendCommand(tabId, 'Runtime.evaluate', {
+          expression: `(${xpathExpr(xpath)}).click()`,
+          returnByValue: false
         });
+      } else {
+        for (const type of ['mousePressed', 'mouseReleased']) {
+          await sendCommand(tabId, 'Input.dispatchMouseEvent', {
+            type, x, y, button: 'left', clickCount: 1
+          });
+        }
       }
       return;
     }
@@ -121,18 +135,19 @@ async function hoverElement(tabId, xpath, timeout = 10000) {
         if (!el) return null;
         el.scrollIntoView({ block: 'center' });
         const r = el.getBoundingClientRect();
-        const x = r.left + r.width / 2;
-        const y = r.top + r.height / 2;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const dpr = window.devicePixelRatio || 1;
         ['mouseover', 'mouseenter', 'mousemove'].forEach(type => {
           el.dispatchEvent(new MouseEvent(type, {
             bubbles: type !== 'mouseenter',
             cancelable: true,
             view: window,
-            clientX: x,
-            clientY: y
+            clientX: cx,
+            clientY: cy
           }));
         });
-        return { x, y };
+        return { x: cx * dpr, y: cy * dpr };
       })()`,
       returnByValue: true
     });

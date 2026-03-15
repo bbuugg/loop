@@ -1,5 +1,9 @@
 export type Vars = Record<string, string>;
 
+export function generateId(): string {
+  return crypto.randomUUID();
+}
+
 export interface Step {
   type: string;
   id?: string;
@@ -51,9 +55,10 @@ export interface FieldDef {
   key: string;
   label: string;
   placeholder?: string;
-  type?: 'text' | 'checkbox' | 'select';
+  type?: 'text' | 'checkbox' | 'select' | 'step-select';
   options?: string[];
   xpath?: true;
+  default?: string;
 }
 
 export interface SchemaDef {
@@ -67,13 +72,13 @@ export const STEP_SCHEMA: Record<string, SchemaDef> = {
   waitElement: { label: 'Wait for Element',  fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//button[@id="submit"]' }, { key: 'timeout', label: 'Timeout (ms)', placeholder: '10000' }] },
   hover:       { label: 'Hover Element',     fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//nav/ul/li[2]' }] },
   click:       { label: 'Click Element',     fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//button[text()="Login"]' }] },
-  type:        { label: 'Type Text',         fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//input[@name="q"]' }, { key: 'text', label: 'Text', placeholder: 'hello world' }] },
+  type:        { label: 'Type Text',         fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//input[@name="q"]' }, { key: 'text', label: 'Text', placeholder: 'hello world', default: 'hello world' }] },
   extract:     { label: 'Extract Text',      fields: [{ key: 'selector', label: 'XPath', xpath: true, placeholder: '//h1' }, { key: 'attribute', label: 'Attribute (optional)', placeholder: 'href' }, { key: 'saveAs', label: 'Save as variable (optional)', placeholder: 'page' }] },
   setVar:      { label: 'Set Variable',      fields: [{ key: 'varName', label: 'Variable name', placeholder: 'page' }, { key: 'varExpr', label: 'Value or expression', placeholder: 'page + 1' }] },
-  scroll:      { label: 'Scroll',            fields: [{ key: 'selector', label: 'XPath (optional)', placeholder: '//div[@class="list"]' }, { key: 'deltaX', label: 'Delta X (px)', placeholder: '0' }, { key: 'deltaY', label: 'Delta Y (px)', placeholder: '300' }] },
-  waitMs:      { label: 'Wait (ms)',         fields: [{ key: 'ms', label: 'Milliseconds', placeholder: '1000' }] },
+  scroll:      { label: 'Scroll',            fields: [{ key: 'selector', label: 'XPath (optional)', placeholder: '//div[@class="list"]' }, { key: 'deltaX', label: 'Delta X (px)', placeholder: '0', default: '0' }, { key: 'deltaY', label: 'Delta Y (px)', placeholder: '300', default: '300' }] },
+  waitMs:      { label: 'Wait (ms)',         fields: [{ key: 'ms', label: 'Milliseconds', placeholder: '1000', default: '1000' }] },
   screenshot:  { label: 'Screenshot',        fields: [{ key: 'filename', label: 'Filename (optional)', placeholder: 'screenshot.png' }] },
-  ifVar:       { label: 'If Variable',        fields: [{ key: 'condExpr', label: 'Condition (JS expression)', placeholder: 'page >= 10' }, { key: 'condAction', label: 'Action if true', type: 'select', options: ['stop', 'goto'] }, { key: 'condGoto', label: 'Go to step ID (if goto)', placeholder: 'step-1' }] },
+  ifVar:       { label: 'If Variable',        fields: [{ key: 'condExpr', label: 'Condition (JS expression)', placeholder: 'page >= 10' }, { key: 'condAction', label: 'Action if true', type: 'select', options: ['stop', 'goto'] }, { key: 'condGoto', label: 'Go to step (if goto)', type: 'step-select' }] },
 };
 
 export function stepSummary(step: Step): string {

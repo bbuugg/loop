@@ -7,7 +7,8 @@ This repo has two distinct parts:
 ### 1. Chrome Extension (root-level files)
 The actual extension loaded into Chrome:
 - `manifest.json` — MV3 manifest; registers `background.js` as service worker and `devtools.html` as the DevTools page
-- `background.js` — Service worker; the CDP bridge. Attaches the Chrome debugger to the inspected tab and executes steps via `chrome.debugger.sendCommand`. Also handles recording by injecting a content script via `chrome.scripting.executeScript`.
+- `background.js` — Service worker; the CDP bridge. Attaches the Chrome debugger to the inspected tab and executes steps via `chrome.debugger.sendCommand`. Also handles recording by injecting a content script via `chrome.scripting.executeScript`, and element picking by injecting `picker.js`.
+- `picker.js` — Standalone content script injected on demand for XPath element picking. Highlights hovered elements with an overlay and tooltip, generates a unique XPath on click, then self-cleans and sends the result back via `chrome.runtime.sendMessage`.
 - `devtools.html` / `devtools.js` — DevTools page entry; creates the DevTools panel that loads the React app
 - `plugin/` — Mirror of the root extension files (backup/alternate copy)
 - `bak/` — Older backup of extension files
@@ -20,7 +21,7 @@ Built with Vite and rendered inside the DevTools panel iframe:
 - `src/components/StepsPanel.tsx` — Step list with per-step actions (edit, delete, move, run, disable)
 - `src/components/VarsPanel.tsx` — Variable key/value editor
 - `src/components/LogPanel.tsx` — Execution log display
-- `src/components/StepModal.tsx` — Modal dialog for adding/editing steps, driven by `STEP_SCHEMA`
+- `src/components/StepModal.tsx` — Modal dialog for adding/editing steps, driven by `STEP_SCHEMA`; fields with `xpath: true` show a 🎯 picker button that triggers element picking on the live page
 - `src/components/ui/` — shadcn/ui primitives (button, input, dialog, etc.)
 
 ## Architecture
@@ -31,10 +32,12 @@ The extension communicates in two directions:
 - `attachDebugger` / `detachDebugger` — manage CDP session on `tabId`
 - `runStep` — execute a single step object via CDP
 - `startRecording` / `stopRecording` — inject/remove the click-recorder content script
+- `startPicking` — inject `picker.js` into the page to start XPath element picking
 
 **Content script → Background → Panel (port):**
 - The panel connects a named port (`crawler-panel-{tabId}`)
 - Recorded clicks in the content script send `recordedStep` messages to background, which relays them to the panel port
+- XPath picker: `startPicking` message injects `picker.js` into the page; user hovers/clicks an element; the XPath is sent back as a `pickedXPath` port message to the panel
 
 **Step execution** (`App.tsx`):
 - `setVar` and `ifVar` steps are handled entirely in the panel (no CDP call)

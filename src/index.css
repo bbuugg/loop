@@ -236,3 +236,8 @@ body {
     @apply cursor-pointer;
   }
 }
+
+/* Radix ScrollArea injects a display:table div to measure content — force it to block to prevent horizontal overflow */
+[data-slot="scroll-area-viewport"] > div {
+  display: block !important;
+}

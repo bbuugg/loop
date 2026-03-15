@@ -59,6 +59,7 @@ All element-targeting steps use **XPath** selectors.
 2. A modal dialog opens — fill in the required fields:
    - **Name** (optional): a label shown in the step list for easy identification
    - Type-specific fields (URL, XPath, text, timeout, etc.)
+   - For XPath fields, click the **🎯** button to pick an element directly on the page (see [XPath Picker](#xpath-picker) below)
 3. Click **OK** to add the step
 
 ### XPath Examples
@@ -69,6 +70,20 @@ All element-targeting steps use **XPath** selectors.
 //nav/ul/li[2]/a              — second nav item link
 //*[@class="menu-item"]       — element with class
 ```
+
+---
+
+## XPath Picker
+
+For any step that requires an XPath selector, you can pick the element visually instead of typing it manually:
+
+1. Open the step modal (add or edit a step with an XPath field)
+2. Click the **🎯** button next to the XPath input
+3. The DevTools panel minimizes and the page enters pick mode — elements highlight as you hover
+4. Click the target element — its XPath is automatically generated and filled into the field
+5. Press **Escape** to cancel picking without selecting
+
+> The picker generates a precise XPath that uniquely identifies the element using its tag, id, class, or positional index.
 
 ---
 

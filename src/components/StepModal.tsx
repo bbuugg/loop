@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react';
-import { STEP_SCHEMA, type Step } from '../schema';
+import { STEP_SCHEMA, type Step, type SchemaDef } from '../schema';
+
+function applyDefaults(step: Step): Step {
+  const schema: SchemaDef = STEP_SCHEMA[step.type] || { label: step.type, fields: [] };
+  const result = { ...step };
+  for (const f of schema.fields) {
+    if (f.default !== undefined && (result as any)[f.key] === undefined) {
+      (result as any)[f.key] = f.default;
+    }
+  }
+  return result;
+}
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -9,16 +20,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 interface Props {
   modal: { step?: Step; index?: number; insertAt?: number };
+  steps: Step[];
   onSave: (step: Step) => void;
   onClose: () => void;
   onPickXPath: (callback: (xpath: string | null) => void) => void;
 }
 
-export default function StepModal({ modal, onSave, onClose, onPickXPath }: Props) {
-  const [step, setStep] = useState<Step>(modal.step || { type: modal.step?.type || 'navigate' } as Step);
+export default function StepModal({ modal, steps, onSave, onClose, onPickXPath }: Props) {
+  const [step, setStep] = useState<Step>(applyDefaults(modal.step || { type: 'navigate' } as Step));
 
   useEffect(() => {
-    setStep(modal.step || { type: 'navigate' } as Step);
+    setStep(applyDefaults(modal.step || { type: 'navigate' } as Step));
   }, [modal]);
 
   const schema = STEP_SCHEMA[step.type] || { label: step.type, fields: [] };
@@ -29,7 +41,7 @@ export default function StepModal({ modal, onSave, onClose, onPickXPath }: Props
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-[340px]">
+      <DialogContent className="max-w-[340px]" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{schema.label}</DialogTitle>
           {step.id && <div className="text-[10px] font-mono text-muted-foreground">{step.id}</div>}
@@ -65,6 +77,17 @@ export default function StepModal({ modal, onSave, onClose, onPickXPath }: Props
                   <SelectContent>
                     {(f.options || []).map((opt: string) => (
                       <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : f.type === 'step-select' ? (
+                <Select value={(step as any)[f.key] || ''} onValueChange={v => setField(f.key, v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="— select step —" /></SelectTrigger>
+                  <SelectContent>
+                    {steps.filter(s => s.id && s.id !== step.id).map(s => (
+                      <SelectItem key={s.id!} value={s.id!}>
+                        {s.name || s.type} ({s.id!.slice(0, 8)})
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -108,12 +131,16 @@ export default function StepModal({ modal, onSave, onClose, onPickXPath }: Props
               </SelectContent>
             </Select>
             {step.onError === 'goto' && (
-              <Input
-                className="mt-1"
-                value={step.onErrorGoto || ''}
-                onChange={e => setField('onErrorGoto', e.target.value)}
-                placeholder="step-3"
-              />
+              <Select value={step.onErrorGoto || ''} onValueChange={v => setField('onErrorGoto', v)}>
+                <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="— select step —" /></SelectTrigger>
+                <SelectContent>
+                  {steps.filter(s => s.id && s.id !== step.id).map(s => (
+                    <SelectItem key={s.id!} value={s.id!}>
+                      {s.name || s.type} ({s.id!.slice(0, 8)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
         </div>
