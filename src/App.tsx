@@ -33,6 +33,21 @@ function applyVars(step: Step, vars: Vars): Step {
   return s;
 }
 
+function sandboxTransform(iframe: HTMLIFrameElement, raw: string, transform: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    function handler(e: MessageEvent) {
+      if (!e.data || e.data.id !== id) return;
+      window.removeEventListener('message', handler);
+      if (e.data.ok) resolve(e.data.result);
+      else reject(new Error(e.data.error));
+    }
+    window.addEventListener('message', handler);
+    iframe.contentWindow!.postMessage({ id, value: raw, transform }, '*');
+    setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('Transform timeout')); }, 5000);
+  });
+}
+
 function evalExpr(expr: string, vars: Vars): string {
   try {
     const keys = Object.keys(vars);
@@ -68,10 +83,11 @@ export default function App() {
   const [running, setRunning]       = useState(false);
   const [loop, setLoop]             = useState(false);
   const [recording, setRecording]   = useState(false);
-  const [stepStates, setStepStates] = useState<Record<number, 'running'|'done'|'error'|'skip'|null>>({});
-  const [modal, setModal]           = useState<{ step?: Step; index?: number; insertAt?: number } | null>(null);
+  const [stepStates, setStepStates] = useState<Record<string, 'running'|'done'|'error'|'skip'|null>>({});
+  const [modal, setModal]           = useState<{ step?: Step; path?: number[]; insertPath?: { path: number[]; branch?: 'children'|'elseChildren' } } | null>(null);
   const stopRef = useRef(false);
   const portRef = useRef<chrome.runtime.Port | null>(null);
+  const sandboxRef = useRef<HTMLIFrameElement | null>(null);
   const loopRef = useRef(false);
   loopRef.current = loop;
   const pickXPathCallbackRef = useRef<((xpath: string | null) => void) | null>(null);
@@ -80,57 +96,171 @@ export default function App() {
     setLogs(prev => [...prev, { text, level, time: ts() }]);
   }, []);
 
-  // ── Steps ──
-  function addStep(type: string) {
-    setModal({ step: { type, id: generateId() } as Step });
+  // ── Tree helpers ──
+  // path = [i, j, k, ...] — indices into children at each level
+  // branch = 'children' | 'elseChildren' for ifVar
+  function getAtPath(tree: Step[], path: number[]): Step {
+    let arr = tree;
+    for (let d = 0; d < path.length - 1; d++) {
+      const s = arr[path[d]];
+      arr = (s as any).__branch === 'else' ? (s.elseChildren || []) : (s.children || []);
+    }
+    return arr[path[path.length - 1]];
   }
 
-  function editStep(index: number) {
-    setModal({ step: { ...steps[index] }, index });
+  function updateTree(tree: Step[], path: number[], branch: 'children'|'elseChildren', updater: (arr: Step[]) => Step[]): Step[] {
+    if (path.length === 0) return updater(tree);
+    return tree.map((s, i) => {
+      if (i !== path[0]) return s;
+      if (path.length === 1) {
+        const arr = branch === 'elseChildren' ? (s.elseChildren || []) : (s.children || []);
+        return branch === 'elseChildren'
+          ? { ...s, elseChildren: updater(arr) }
+          : { ...s, children: updater(arr) };
+      }
+      return { ...s, children: updateTree(s.children || [], path.slice(1), branch, updater) };
+    });
+  }
+
+  // ── Steps ──
+  function addStep(type: string, parentPath?: number[], branch?: 'children'|'elseChildren') {
+    const newStep: Step = { type, id: generateId(), ...(STEP_SCHEMA[type]?.isContainer ? { children: [] } : {}), ...(type === 'ifVar' ? { elseChildren: [] } : {}) };
+    setSteps(prev => updateTree(prev, parentPath || [], branch || 'children', arr => [...arr, newStep]));
+  }
+
+  function editStep(path: number[]) {
+    const step = getAtPath(steps, path);
+    setModal({ step: { ...step }, path });
   }
 
   function saveStep(step: Step) {
-    if (modal!.index !== undefined) {
-      setSteps(prev => prev.map((s, i) => i === modal!.index ? step : s));
-    } else if (modal!.insertAt !== undefined) {
-      setSteps(prev => { const a = [...prev]; a.splice(modal!.insertAt!, 0, step); return a; });
+    const m = modal!;
+    if (m.path !== undefined) {
+      const p = m.path;
+      setSteps(prev => updateTree(prev, p.slice(0, -1), 'children', arr =>
+        arr.map((s, i) => i === p[p.length - 1] ? step : s)
+      ));
+    } else if (m.insertPath !== undefined) {
+      const { path, branch } = m.insertPath;
+      setSteps(prev => updateTree(prev, path.slice(0, -1), branch || 'children', arr => {
+        const a = [...arr];
+        a.splice(path[path.length - 1], 0, step);
+        return a;
+      }));
     } else {
       setSteps(prev => [...prev, step]);
     }
     setModal(null);
   }
 
-  function insertStep(insertAt: number, type: string) {
-    setModal({ step: { type, id: generateId() } as Step, insertAt });
-  }
-
-  function deleteStep(index: number) {
-    setSteps(prev => prev.filter((_, i) => i !== index));
-  }
-
-  function moveStep(index: number, dir: -1 | 1) {
-    setSteps(prev => {
-      const a = [...prev];
-      const j = index + dir;
-      if (j < 0 || j >= a.length) return a;
-      [a[index], a[j]] = [a[j], a[index]];
+  function insertStep(path: number[], type: string, branch?: 'children'|'elseChildren') {
+    const newStep: Step = { type, id: generateId(), ...(STEP_SCHEMA[type]?.isContainer ? { children: [] } : {}), ...(type === 'ifVar' ? { elseChildren: [] } : {}) };
+    setSteps(prev => updateTree(prev, path.slice(0, -1), branch || 'children', arr => {
+      const a = [...arr];
+      a.splice(path[path.length - 1], 0, newStep);
       return a;
-    });
+    }));
   }
 
-  function duplicateStep(index: number) {
-    setSteps(prev => {
-      const a = [...prev];
-      a.splice(index + 1, 0, { ...a[index], id: generateId() });
+  function deleteStep(path: number[]) {
+    setSteps(prev => updateTree(prev, path.slice(0, -1), 'children', arr =>
+      arr.filter((_, i) => i !== path[path.length - 1])
+    ));
+  }
+
+  function duplicateStep(path: number[]) {
+    setSteps(prev => updateTree(prev, path.slice(0, -1), 'children', arr => {
+      const a = [...arr];
+      const idx = path[path.length - 1];
+      a.splice(idx + 1, 0, { ...a[idx], id: generateId() });
       return a;
-    });
+    }));
   }
 
-  function toggleDisabled(index: number) {
-    setSteps(prev => prev.map((s, i) => i === index ? { ...s, disabled: !s.disabled } : s));
+  function toggleDisabled(path: number[]) {
+    setSteps(prev => updateTree(prev, path.slice(0, -1), 'children', arr =>
+      arr.map((s, i) => i === path[path.length - 1] ? { ...s, disabled: !s.disabled } : s)
+    ));
+  }
+
+  function reorderSteps(parentPath: number[], branch: 'children'|'elseChildren', newArr: Step[]) {
+    if (parentPath.length === 0) {
+      setSteps(newArr);
+    } else {
+      setSteps(prev => updateTree(prev, parentPath, branch, () => newArr));
+    }
   }
 
   // ── Run ──
+  async function runSteps(stepsArr: Step[]): Promise<'stop'|'done'> {
+    for (let i = 0; i < stepsArr.length; i++) {
+      if (stopRef.current) { addLog('Stopped.', 'warn'); return 'stop'; }
+      const step = stepsArr[i];
+      const sid = step.id || `step-${i}`;
+      if (step.disabled) { setStepStates(p => ({ ...p, [sid]: 'skip' })); continue; }
+      setStepStates(p => ({ ...p, [sid]: 'running' }));
+      const schema = STEP_SCHEMA[step.type] || { label: step.type };
+      addLog(`${schema.label}${stepSummary(step) ? ' — ' + stepSummary(step) : ''}`, 'info');
+      try {
+        if (step.type === 'setVar') {
+          const name = step.varName?.match(/^\\w+$/) ? step.varName : null;
+          if (!name) throw new Error('Invalid variable name');
+          const result = evalExpr(interpolate(step.varExpr || '', vars), vars);
+          setVars(prev => ({ ...prev, [name]: String(result) }));
+          addLog(`${name} = ${result}`, 'ok');
+        } else if (step.type === 'loop') {
+          addLog('Loop start.', 'info');
+          while (true) {
+            if (stopRef.current) break;
+            const res = await runSteps(step.children || []);
+            if (res === 'stop') break;
+            if (step.loopExitExpr) {
+              const expr = interpolate(step.loopExitExpr, vars);
+              const result = evalExpr(expr, vars);
+              if (result === 'true' || result === true as any) { addLog('Loop exit condition met.', 'warn'); break; }
+            }
+          }
+        } else if (step.type === 'ifVar') {
+          const expr = interpolate(step.condExpr || 'false', vars);
+          const result = evalExpr(expr, vars);
+          addLog(`if (${expr}) = ${result}`, 'info');
+          if (result === 'true' || result === true as any) {
+            const res = await runSteps(step.children || []);
+            if (res === 'stop') return 'stop';
+          } else {
+            const res = await runSteps(step.elseChildren || []);
+            if (res === 'stop') return 'stop';
+          }
+        } else {
+          const res = await sendMsg({ type: 'runStep', tabId, step: applyVars(step, vars) });
+          if (step.type === 'extract' && step.saveAs && res?.result?.value != null) {
+            const raw = String(res.result.value);
+            let final = raw;
+            if (step.transform && sandboxRef.current) {
+              final = await sandboxTransform(sandboxRef.current, raw, step.transform);
+            }
+            setVars(prev => ({ ...prev, [step.saveAs!]: final }));
+            addLog(`${step.saveAs} = ${final}`, 'ok');
+          }
+          if (step.type === 'screenshot' && res?.result?.screenshot) {
+            const filename = applyVars(step, vars).filename || 'screenshot.png';
+            const a = document.createElement('a');
+            a.href = `data:image/png;base64,${res.result.screenshot}`;
+            a.download = filename;
+            a.click();
+            addLog(`Screenshot saved: ${filename}`, 'ok');
+          }
+        }
+        setStepStates(p => ({ ...p, [sid]: 'done' }));
+      } catch (e: any) {
+        addLog(`Error: ${e.message}`, 'err');
+        setStepStates(p => ({ ...p, [sid]: 'error' }));
+        if ((step.onError || 'stop') === 'stop') return 'stop';
+      }
+    }
+    return 'done';
+  }
+
   async function run() {
     if (running) return;
     stopRef.current = false;
@@ -144,68 +274,11 @@ export default function App() {
       setRunning(false);
       return;
     }
-    let i = 0;
-    while (i < steps.length) {
-      if (stopRef.current) { addLog('Stopped.', 'warn'); break; }
-      const step = steps[i];
-      if (step.disabled) { setStepStates(p => ({ ...p, [i]: 'skip' })); i++; continue; }
-      setStepStates(p => ({ ...p, [i]: 'running' }));
-      const schema = STEP_SCHEMA[step.type] || { label: step.type };
-      addLog(`Step ${i+1}: ${schema.label}${stepSummary(step) ? ' — ' + stepSummary(step) : ''}`, 'info');
-      try {
-        if (step.type === 'setVar') {
-          const name = step.varName?.match(/^\w+$/) ? step.varName : null;
-          if (!name) throw new Error('Invalid variable name');
-          const expr = interpolate(step.varExpr || '', vars);
-          const result = evalExpr(expr, vars);
-          setVars(prev => ({ ...prev, [name]: String(result) }));
-          addLog(`${name} = ${result}`, 'ok');
-        } else if (step.type === 'ifVar') {
-          const expr = interpolate(step.condExpr || 'false', vars);
-          const result = evalExpr(expr, vars);
-          addLog(`if (${expr}) = ${result}`, 'info');
-          if (result === 'true' || result === true as any) {
-            if (step.condAction === 'stop') {
-              addLog('Condition met → stop.', 'warn');
-              break;
-            } else if (step.condAction === 'goto' && step.condGoto) {
-              const idx = steps.findIndex(s => s.id === step.condGoto);
-              if (idx >= 0) { addLog(`Condition met → goto ${step.condGoto}`, 'warn'); i = idx; continue; }
-              else throw new Error(`Step ID not found: ${step.condGoto}`);
-            }
-          }
-        } else {
-          const res = await sendMsg({ type: 'runStep', tabId, step: applyVars(step, vars) });
-          if (step.type === 'extract' && step.saveAs && res?.result?.value != null) {
-            setVars(prev => ({ ...prev, [step.saveAs!]: String(res.result.value) }));
-            addLog(`${step.saveAs} = ${res.result.value}`, 'ok');
-          }
-          if (step.type === 'screenshot' && res?.result?.screenshot) {
-            const filename = applyVars(step, vars).filename || 'screenshot.png';
-            const a = document.createElement('a');
-            a.href = `data:image/png;base64,${res.result.screenshot}`;
-            a.download = filename;
-            a.click();
-            addLog(`Screenshot saved: ${filename}`, 'ok');
-          }
-        }
-        setStepStates(p => ({ ...p, [i]: 'done' }));
-      } catch (e: any) {
-        addLog(`Error: ${e.message}`, 'err');
-        setStepStates(p => ({ ...p, [i]: 'error' }));
-        const onErr = step.onError || 'stop';
-        if (onErr === 'stop') break;
-        if (onErr === 'goto' && step.onErrorGoto) {
-          const idx = steps.findIndex(s => s.id === step.onErrorGoto);
-          if (idx >= 0) { i = idx; continue; }
-        }
-      }
-      i++;
-    }
+    await runSteps(steps);
     try { await sendMsg({ type: 'detachDebugger', tabId }); } catch {}
     if (loopRef.current && !stopRef.current) {
       addLog('Loop — restarting.', 'warn');
-      setTimeout(() => run(), 500);
+      setTimeout(() => { if (!stopRef.current) run(); }, 500);
       return;
     }
     setRunning(false);
@@ -277,22 +350,40 @@ export default function App() {
 
   // ── XPath Picker ──
   async function startPickXPath(callback: (xpath: string | null) => void) {
+    const wasRecording = recording;
+    if (wasRecording) {
+      try { await sendMsg({ type: 'stopRecording', tabId }); } catch {}
+      setRecording(false);
+    }
     try {
       getOrCreatePort();
-      pickXPathCallbackRef.current = callback;
+      pickXPathCallbackRef.current = (xpath) => {
+        callback(xpath);
+        if (wasRecording) {
+          sendMsg({ type: 'startRecording', tabId })
+            .then(() => setRecording(true))
+            .catch(() => {});
+        }
+      };
       await sendMsg({ type: 'startPicking', tabId });
       addLog('Click an element on the page to pick its XPath. Press ESC to cancel.', 'info');
     } catch (e: any) {
       pickXPathCallbackRef.current = null;
+      if (wasRecording) {
+        sendMsg({ type: 'startRecording', tabId })
+          .then(() => setRecording(true))
+          .catch(() => {});
+      }
       addLog(`Picker failed: ${e.message}`, 'err');
     }
   }
 
   // ── Run one ──
-  async function runOne(index: number) {
-    const step = steps[index];
+  async function runOne(path: number[]) {
+    const step = getAtPath(steps, path);
     if (!step) return;
-    setStepStates(p => ({ ...p, [index]: 'running' }));
+    const sid = step.id!;
+    setStepStates(p => ({ ...p, [sid]: 'running' }));
     try {
       await sendMsg({ type: 'attachDebugger', tabId });
       if (step.type === 'setVar') {
@@ -303,8 +394,13 @@ export default function App() {
       } else {
         const res = await sendMsg({ type: 'runStep', tabId, step: applyVars(step, vars) });
         if (step.type === 'extract' && step.saveAs && res?.result?.value != null) {
-          setVars(prev => ({ ...prev, [step.saveAs!]: String(res.result.value) }));
-          addLog(`${step.saveAs} = ${res.result.value}`, 'ok');
+          const raw = String(res.result.value);
+          let final = raw;
+          if (step.transform && sandboxRef.current) {
+            final = await sandboxTransform(sandboxRef.current, raw, step.transform);
+          }
+          setVars(prev => ({ ...prev, [step.saveAs!]: final }));
+          addLog(`${step.saveAs} = ${final}`, 'ok');
         }
         if (step.type === 'screenshot' && res?.result?.screenshot) {
           const filename = applyVars(step, vars).filename || 'screenshot.png';
@@ -315,11 +411,11 @@ export default function App() {
           addLog(`Screenshot saved: ${filename}`, 'ok');
         }
       }
-      setStepStates(p => ({ ...p, [index]: 'done' }));
-      addLog(`Step ${index+1} ok`, 'ok');
+      setStepStates(p => ({ ...p, [sid]: 'done' }));
+      addLog(`Step ok`, 'ok');
     } catch (e: any) {
-      setStepStates(p => ({ ...p, [index]: 'error' }));
-      addLog(`Step ${index+1} error: ${e.message}`, 'err');
+      setStepStates(p => ({ ...p, [sid]: 'error' }));
+      addLog(`Step error: ${e.message}`, 'err');
     }
   }
 
@@ -346,18 +442,75 @@ export default function App() {
     reader.readAsText(file);
   }
 
-  const [folderFiles, setFolderFiles] = useState<File[]>([]);
+  // ── Saved configs ──
+  type SavedConfig = { id: string; name: string; steps: Step[]; vars: Vars };
+  const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>(() => {
+    // loaded async below
+    return [];
+  });
 
-  function openFolder(files: FileList) {
-    const jsons = Array.from(files)
-      .filter(f => f.name.endsWith('.json'))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    setFolderFiles(jsons);
-    addLog(`Found ${jsons.length} JSON file(s).`, 'info');
+  useEffect(() => {
+    if (!chrome?.storage?.local) return;
+    chrome.storage.local.get('savedConfigs', res => {
+      if (Array.isArray(res.savedConfigs)) setSavedConfigs(res.savedConfigs);
+    });
+  }, []);
+
+  function persistConfigs(configs: SavedConfig[]) {
+    setSavedConfigs(configs);
+    if (chrome?.storage?.local) chrome.storage.local.set({ savedConfigs: configs });
   }
 
-  function importFromFolder(file: File) {
-    importJSON(file);
+  function saveConfig(name: string) {
+    const clean = steps.map(({ _replaceKey, ...s }) => s);
+    const existing = savedConfigs.find(c => c.name === name);
+    if (existing) {
+      persistConfigs(savedConfigs.map(c => c.id === existing.id ? { ...c, steps: clean, vars } : c));
+    } else {
+      persistConfigs([...savedConfigs, { id: generateId(), name, steps: clean, vars }]);
+    }
+  }
+
+  function loadConfig(id: string) {
+    const cfg = savedConfigs.find(c => c.id === id);
+    if (!cfg) return;
+    setSteps(cfg.steps.map(s => s.id ? s : { ...s, id: generateId() }));
+    setVars(cfg.vars);
+    addLog(`Loaded: ${cfg.name}`, 'ok');
+  }
+
+  function deleteConfig(id: string) {
+    persistConfigs(savedConfigs.filter(c => c.id !== id));
+  }
+
+  function exportConfig(id: string) {
+    const cfg = savedConfigs.find(c => c.id === id);
+    if (!cfg) return;
+    const data = JSON.stringify({ steps: cfg.steps, vars: cfg.vars }, null, 2);
+    const a = document.createElement('a');
+    a.href = `data:application/json,${encodeURIComponent(data)}`;
+    a.download = `${cfg.name}.json`;
+    a.click();
+  }
+
+  function importConfig(file: File) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const { steps: s, vars: v } = JSON.parse(e.target!.result as string);
+        const name = file.name.replace(/\.json$/i, '');
+        const newSteps = Array.isArray(s) ? s.map((st: Step) => st.id ? st : { ...st, id: generateId() }) : [];
+        const newVars = v && typeof v === 'object' ? v : {};
+        const existing = savedConfigs.find(c => c.name === name);
+        if (existing) {
+          persistConfigs(savedConfigs.map(c => c.id === existing.id ? { ...c, steps: newSteps, vars: newVars } : c));
+        } else {
+          persistConfigs([...savedConfigs, { id: generateId(), name, steps: newSteps, vars: newVars }]);
+        }
+        addLog(`Imported config: ${name}`, 'ok');
+      } catch { addLog('Import failed.', 'err'); }
+    };
+    reader.readAsText(file);
   }
 
   return (
@@ -367,25 +520,30 @@ export default function App() {
           running={running} recording={recording} loop={loop}
           onRun={run} onStop={stop} onLoop={setLoop}
           onRecord={toggleRecord}
-          onClearSteps={() => setSteps([])}
-          onClearLog={() => setLogs([])}
-          onExport={exportJSON}
-          onImport={importJSON}
-          folderFiles={folderFiles}
-          onOpenFolder={openFolder}
-          onImportFromFolder={importFromFolder}
+          savedConfigs={savedConfigs}
+          onSaveConfig={saveConfig}
+          onLoadConfig={loadConfig}
+          onDeleteConfig={deleteConfig}
+          onExportConfig={exportConfig}
+          onImportConfig={importConfig}
         />
         <div className="flex flex-1 overflow-hidden">
           <StepsPanel
             steps={steps} stepStates={stepStates}
-            onAdd={addStep} onEdit={editStep} onDelete={deleteStep}
-            onMove={moveStep} onDuplicate={duplicateStep}
-            onRunOne={runOne} onToggleDisabled={toggleDisabled}
-            onInsert={insertStep}
+            running={running}
+            onResetStates={() => setStepStates({})}
+            onClearSteps={() => setSteps([])}
+            onAdd={addStep}
+            onEdit={editStep}
+            onDelete={deleteStep}
+            onDuplicate={duplicateStep}
+            onRunOne={runOne}
+            onToggleDisabled={toggleDisabled}
+            onReorder={reorderSteps}
           />
           <div className="flex flex-col flex-1 overflow-hidden">
             <VarsPanel vars={vars} setVars={setVars} />
-            <LogPanel logs={logs} />
+            <LogPanel logs={logs} onClearLog={() => setLogs([])} />
           </div>
         </div>
         {modal && (
@@ -397,6 +555,7 @@ export default function App() {
             onPickXPath={startPickXPath}
           />
         )}
+        <iframe ref={sandboxRef} src="sandbox.html" style={{ display: 'none' }} />
       </div>
     </TooltipProvider>
   );

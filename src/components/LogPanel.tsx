@@ -1,4 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { CleanIcon } from '@hugeicons/core-free-icons';
 import type { LogEntry } from '../schema';
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -15,7 +18,7 @@ const LEVEL_DOT: Record<string, React.CSSProperties> = {
   err:  { background: 'var(--accent-danger)' },
 };
 
-export default function LogPanel({ logs }: { logs: LogEntry[] }) {
+export default function LogPanel({ logs, onClearLog }: { logs: LogEntry[]; onClearLog: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,8 +28,11 @@ export default function LogPanel({ logs }: { logs: LogEntry[] }) {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden" style={{ background: 'var(--panel-surface)' }}>
-      <div className="flex-shrink-0 px-3 py-1.5" style={{ borderBottom: '1px solid var(--panel-border)' }}>
+      <div className="flex items-center justify-between flex-shrink-0 px-3 py-1.5" style={{ borderBottom: '1px solid var(--panel-border)' }}>
         <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Log</span>
+        <Button variant="ghost" size="icon" className="w-5 h-5" onClick={onClearLog} title="Clear log">
+          <HugeiconsIcon icon={CleanIcon} size={13} />
+        </Button>
       </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         <div className="px-3 py-2 flex flex-col gap-0.5">

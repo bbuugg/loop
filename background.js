@@ -12,7 +12,11 @@ function sendCommand(tabId, method, params = {}) {
   return new Promise((resolve, reject) => {
     chrome.debugger.sendCommand({ tabId }, method, params, result => {
       if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
+        const msg = chrome.runtime.lastError.message;
+        if (msg && msg.includes('not attached')) {
+          attachedTabs.delete(tabId);
+        }
+        reject(new Error(msg));
       } else {
         resolve(result);
       }
@@ -25,7 +29,13 @@ async function ensureAttached(tabId) {
   await new Promise((resolve, reject) => {
     chrome.debugger.attach({ tabId }, '1.3', () => {
       if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
+        const msg = chrome.runtime.lastError.message;
+        if (msg && msg.includes('already attached')) {
+          attachedTabs.add(tabId);
+          resolve();
+        } else {
+          reject(new Error(msg));
+        }
       } else {
         attachedTabs.add(tabId);
         resolve();
@@ -281,6 +291,7 @@ async function runStep(tabId, step) {
 
 // Recording: port map from panel connections
 const recordingPanelPorts = new Map(); // tabId -> port
+const recordingTabs = new Set(); // tabIds currently being recorded
 
 chrome.runtime.onConnect.addListener(port => {
   const match = port.name.match(/^crawler-panel-(\d+)$/);
@@ -289,7 +300,24 @@ chrome.runtime.onConnect.addListener(port => {
   recordingPanelPorts.set(inspectedTabId, port);
   port.onDisconnect.addListener(() => {
     recordingPanelPorts.delete(inspectedTabId);
+    recordingTabs.delete(inspectedTabId);
   });
+});
+
+// Capture navigation during recording
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return; // main frame only
+  const tabId = details.tabId;
+  if (!recordingTabs.has(tabId)) return;
+  const port = recordingPanelPorts.get(tabId);
+  if (!port) return;
+  const { url, transitionType } = details;
+  if (!url || url.startsWith('chrome://') || url.startsWith('chrome-extension://')) return;
+  if (transitionType === 'reload') {
+    port.postMessage({ type: 'recordedStep', step: { type: 'refresh' } });
+  } else if (['typed', 'generated', 'start_page', 'form_submit', 'link', 'auto_bookmark'].includes(transitionType)) {
+    port.postMessage({ type: 'recordedStep', step: { type: 'navigate', url } });
+  }
 });
 
 // Single unified message listener
@@ -434,8 +462,44 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               clearTimeout(window.__crawlerLastInputTimer);
               if (el.value) flushInput(el);
             }, true);
+            // Scroll recording: debounce and accumulate delta
+            window.__crawlerScrollTimer = null;
+            window.__crawlerScrollDeltaX = 0;
+            window.__crawlerScrollDeltaY = 0;
+            function findScrollableAncestor(el) {
+              while (el && el !== document.body) {
+                const style = window.getComputedStyle(el);
+                const overflow = style.overflow + style.overflowY + style.overflowX;
+                if (/auto|scroll/.test(overflow) && (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth)) return el;
+                el = el.parentElement;
+              }
+              return null;
+            }
+            document.addEventListener('wheel', function crawlerWheel(e) {
+              // Normalize to pixels
+              let dx = e.deltaX, dy = e.deltaY;
+              if (e.deltaMode === 1) { dx *= 40; dy *= 40; }
+              else if (e.deltaMode === 2) { dx *= 800; dy *= 800; }
+              // Find scrollable target
+              const scrollEl = findScrollableAncestor(e.target) || null;
+              const key = scrollEl ? getXPath(scrollEl) : '__document__';
+              if (!window.__crawlerScrollMap) window.__crawlerScrollMap = {};
+              if (!window.__crawlerScrollMap[key]) window.__crawlerScrollMap[key] = { dx: 0, dy: 0, selector: scrollEl ? getXPath(scrollEl) : null, timer: null };
+              const entry = window.__crawlerScrollMap[key];
+              entry.dx += dx;
+              entry.dy += dy;
+              clearTimeout(entry.timer);
+              entry.timer = setTimeout(() => {
+                const fdx = Math.round(entry.dx);
+                const fdy = Math.round(entry.dy);
+                const sel = entry.selector;
+                delete window.__crawlerScrollMap[key];
+                chrome.runtime.sendMessage({ type: 'recordedStep', step: { type: 'scroll', selector: sel || '', deltaX: fdx, deltaY: fdy } });
+              }, 500);
+            }, { passive: true, capture: true });
           }
         });
+        recordingTabs.add(tabId);
         sendResponse({ ok: true });
       } catch (e) {
         sendResponse({ error: e.message });
@@ -455,6 +519,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             window.__lastHoverXPath = null;
           }
         });
+        recordingTabs.delete(msg.tabId);
         sendResponse({ ok: true });
       } catch (e) {
         sendResponse({ error: e.message });

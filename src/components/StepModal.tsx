@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
 import { STEP_SCHEMA, type Step, type SchemaDef } from '../schema';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 function applyDefaults(step: Step): Step {
   const schema: SchemaDef = STEP_SCHEMA[step.type] || { label: step.type, fields: [] };
@@ -11,15 +17,9 @@ function applyDefaults(step: Step): Step {
   }
   return result;
 }
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Props {
-  modal: { step?: Step; index?: number; insertAt?: number };
+  modal: { step?: Step; path?: number[]; insertPath?: { path: number[]; branch?: 'children'|'elseChildren' } };
   steps: Step[];
   onSave: (step: Step) => void;
   onClose: () => void;
@@ -58,7 +58,7 @@ export default function StepModal({ modal, steps, onSave, onClose, onPickXPath }
             />
           </div>
 
-          {/* Dynamic fields */}
+          {/* Dynamic fields from schema */}
           {schema.fields.map((f: any) => (
             <div key={f.key} className="flex flex-col gap-1">
               <Label className="text-xs">{f.label}</Label>
@@ -80,17 +80,6 @@ export default function StepModal({ modal, steps, onSave, onClose, onPickXPath }
                     ))}
                   </SelectContent>
                 </Select>
-              ) : f.type === 'step-select' ? (
-                <Select value={(step as any)[f.key] || ''} onValueChange={v => setField(f.key, v)}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="— select step —" /></SelectTrigger>
-                  <SelectContent>
-                    {steps.filter(s => s.id && s.id !== step.id).map(s => (
-                      <SelectItem key={s.id!} value={s.id!}>
-                        {s.name || s.type} ({s.id!.slice(0, 8)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               ) : f.xpath ? (
                 <div className="flex gap-1">
                   <Input
@@ -107,6 +96,14 @@ export default function StepModal({ modal, steps, onSave, onClose, onPickXPath }
                     onClick={() => onPickXPath(xpath => { if (xpath) setField(f.key, xpath); })}
                   >🎯</Button>
                 </div>
+              ) : f.type === 'textarea' ? (
+                <textarea
+                  value={(step as any)[f.key] || ''}
+                  onChange={e => setField(f.key, e.target.value)}
+                  placeholder={f.placeholder}
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm resize-y focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
               ) : (
                 <Input
                   value={(step as any)[f.key] || ''}
@@ -116,6 +113,19 @@ export default function StepModal({ modal, steps, onSave, onClose, onPickXPath }
               )}
             </div>
           ))}
+
+          {/* ifVar: just show condExpr; then/else branches are children in the tree */}
+          {step.type === 'ifVar' && (
+            <div className="flex flex-col gap-1 border rounded p-2">
+              <Label className="text-xs font-semibold" style={{ color: 'var(--accent-blue)' }}>Condition (JS expression)</Label>
+              <Input
+                value={step.condExpr || ''}
+                onChange={e => setField('condExpr', e.target.value)}
+                placeholder="e.g. count >= 10"
+              />
+              <p className="text-[10px] opacity-50">Add steps to the "then" and "else" branches in the steps tree.</p>
+            </div>
+          )}
 
           {/* On Error */}
           <div className="flex flex-col gap-1">
@@ -127,21 +137,8 @@ export default function StepModal({ modal, steps, onSave, onClose, onPickXPath }
               <SelectContent>
                 <SelectItem value="stop">Stop</SelectItem>
                 <SelectItem value="continue">Continue</SelectItem>
-                <SelectItem value="goto">Go to step</SelectItem>
               </SelectContent>
             </Select>
-            {step.onError === 'goto' && (
-              <Select value={step.onErrorGoto || ''} onValueChange={v => setField('onErrorGoto', v)}>
-                <SelectTrigger className="h-8 text-xs mt-1"><SelectValue placeholder="— select step —" /></SelectTrigger>
-                <SelectContent>
-                  {steps.filter(s => s.id && s.id !== step.id).map(s => (
-                    <SelectItem key={s.id!} value={s.id!}>
-                      {s.name || s.type} ({s.id!.slice(0, 8)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
         </div>
 

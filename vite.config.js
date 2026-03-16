@@ -14,6 +14,8 @@ function copyStaticPlugin() {
         'devtools.html',
         'devtools.js',
         'picker.js',
+        'sandbox.html',
+        'sandbox.js',
       ];
       mkdirSync('./plugin', { recursive: true });
       for (const f of files) {

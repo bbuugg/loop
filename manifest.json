@@ -3,7 +3,7 @@
   "name": "Loop",
   "version": "1.0.0",
   "description": "DevTools panel automation — build, run, and record step sequences on any page",
-  "permissions": ["debugger", "tabs", "scripting", "activeTab", "sidePanel"],
+  "permissions": ["debugger", "tabs", "scripting", "activeTab", "sidePanel", "webNavigation", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -17,6 +17,9 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "sandbox": {
+    "pages": ["sandbox.html"]
   },
   "action": {
     "default_icon": {

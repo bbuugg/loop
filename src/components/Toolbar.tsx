@@ -1,10 +1,13 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { PlayIcon, StopIcon, RecordIcon, Delete01Icon, CleanIcon, Download01Icon, Upload01Icon } from '@hugeicons/core-free-icons';
+import { PlayIcon, StopIcon, RecordIcon, Delete01Icon, Download01Icon, Upload01Icon } from '@hugeicons/core-free-icons';
+import type { Step, Vars } from '@/schema';
+
+type SavedConfig = { id: string; name: string; steps: Step[]; vars: Vars };
 
 interface Props {
   running: boolean;
@@ -14,24 +17,29 @@ interface Props {
   onStop: () => void;
   onLoop: (v: boolean) => void;
   onRecord: () => void;
-  onClearSteps: () => void;
-  onClearLog: () => void;
-  onExport: () => void;
-  onImport: (f: File) => void;
-  folderFiles: File[];
-  onOpenFolder: (files: FileList) => void;
-  onImportFromFolder: (f: File) => void;
+  savedConfigs: SavedConfig[];
+  onSaveConfig: (name: string) => void;
+  onLoadConfig: (id: string) => void;
+  onDeleteConfig: (id: string) => void;
+  onExportConfig: (id: string) => void;
+  onImportConfig: (f: File) => void;
 }
 
 export default function Toolbar({
   running, recording, loop,
   onRun, onStop, onLoop, onRecord,
-  onClearSteps, onClearLog,
-  onExport, onImport,
-  folderFiles, onOpenFolder, onImportFromFolder,
+  savedConfigs, onSaveConfig, onLoadConfig, onDeleteConfig, onExportConfig, onImportConfig,
 }: Props) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const folderRef = useRef<HTMLInputElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const [newName, setNewName] = useState('');
+  const [open, setOpen] = useState(false);
+
+  function handleSave() {
+    const name = newName.trim();
+    if (!name) return;
+    onSaveConfig(name);
+    setNewName('');
+  }
 
   return (
     <div
@@ -43,86 +51,98 @@ export default function Toolbar({
           <HugeiconsIcon icon={PlayIcon} size={11} /> Run
         </Button>
       ) : (
-        <Button size="sm" onClick={onStop} style={{ background: 'var(--accent-danger-bg)', border: '1px solid var(--accent-danger-border)', color: 'var(--accent-danger)' }}>
+        <Button size="sm" onClick={onStop} style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--accent-danger)', color: 'var(--accent-danger)' }}>
           <HugeiconsIcon icon={StopIcon} size={11} /> Stop
         </Button>
       )}
-
-      <div className="flex items-center gap-1.5 h-6 px-2 rounded-md border" style={{ background: 'var(--panel-item-bg)', borderColor: 'var(--panel-item-border)' }}>
+      <div className="flex items-center gap-1">
         <Checkbox
-          id="loop-check"
+          id="loop"
           checked={loop}
           onCheckedChange={v => onLoop(!!v)}
-          className="size-3"
         />
-        <Label htmlFor="loop-check" className="text-[11px] cursor-pointer select-none" style={{ color: 'var(--text-secondary)' }}>Loop</Label>
+        <Label htmlFor="loop" className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Loop</Label>
       </div>
-
-      <Button
-        size="sm"
+      <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--panel-border)', margin: '0 2px' }} />
+      <Button size="sm"
         onClick={onRecord}
-        style={recording ? {
-          background: 'var(--accent-danger-bg)',
-          border: '1px solid var(--accent-danger-border)',
-          color: 'var(--accent-record)',
-        } : {
-          background: 'var(--panel-item-bg)',
-          border: '1px solid var(--panel-item-border)',
-          color: 'var(--text-secondary)',
-        }}
-      >
+        style={recording
+          ? { background: 'var(--accent-red-bg)', border: '1px solid var(--accent-red-border)', color: 'var(--accent-red)' }
+          : { background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-muted)' }
+        }>
         <HugeiconsIcon icon={RecordIcon} size={11} />
         {recording ? 'Stop Rec' : 'Record'}
       </Button>
+      <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--panel-border)', margin: '0 2px' }} />
 
-      <div className="w-px h-4 mx-0.5" style={{ background: 'var(--panel-border)' }} />
+      {/* Configs Dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button size="sm" style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-muted)' }}>
+            Configs {savedConfigs.length > 0 && `(${savedConfigs.length})`}
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Saved Configs</DialogTitle>
+          </DialogHeader>
 
-      <Button size="sm" onClick={onClearSteps} style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-        <HugeiconsIcon icon={Delete01Icon} size={11} /> Steps
-      </Button>
+          {/* Save current as new config */}
+          <div className="flex gap-1 mt-1">
+            <input
+              className="flex-1 rounded border px-2 py-1 text-[11px]"
+              style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-primary)' }}
+              placeholder="Config name..."
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+            />
+            <Button size="sm" onClick={handleSave}
+              style={{ background: 'var(--accent-blue-bg)', border: '1px solid var(--accent-blue-border)', color: 'var(--accent-blue)' }}>
+              Save Current
+            </Button>
+          </div>
 
-      <Button size="sm" onClick={onClearLog} style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-        <HugeiconsIcon icon={CleanIcon} size={11} /> Log
-      </Button>
+          {/* Import from file */}
+          <div className="flex gap-1">
+            <Button size="sm" onClick={() => importRef.current?.click()}
+              style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-muted)' }}>
+              <HugeiconsIcon icon={Upload01Icon} size={11} /> Import JSON
+            </Button>
+            <input ref={importRef} type="file" accept=".json" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) { onImportConfig(f); e.target.value = ''; } }} />
+          </div>
 
-      <div className="w-px h-4 mx-0.5" style={{ background: 'var(--panel-border)' }} />
-
-      <Button size="sm" onClick={onExport} style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-        <HugeiconsIcon icon={Download01Icon} size={11} /> Export
-      </Button>
-
-      <Button size="sm" onClick={() => fileRef.current?.click()} style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-        <HugeiconsIcon icon={Upload01Icon} size={11} /> Import
-      </Button>
-      <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { onImport(f); e.target.value = ''; } }} />
-
-      <div className="w-px h-4 mx-0.5" style={{ background: 'var(--panel-border)' }} />
-
-      <Button size="sm" onClick={() => folderRef.current?.click()} style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-        📁 Open Folder
-      </Button>
-      <input
-        ref={folderRef}
-        type="file"
-        className="hidden"
-        // @ts-ignore
-        webkitdirectory=""
-        mozdirectory=""
-        onChange={e => { if (e.target.files?.length) { onOpenFolder(e.target.files); e.target.value = ''; } }}
-      />
-
-      {folderFiles.length > 0 && (
-        <Select value="" onValueChange={v => { const idx = Number(v); if (!isNaN(idx)) onImportFromFolder(folderFiles[idx]); }}>
-          <SelectTrigger className="h-6 w-40 text-[11px]">
-            <SelectValue placeholder="Select JSON…" />
-          </SelectTrigger>
-          <SelectContent>
-            {folderFiles.map((f, i) => (
-              <SelectItem key={f.name} value={String(i)} className="text-[11px]">{f.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+          {/* Config list */}
+          <div className="flex flex-col gap-1 mt-1 max-h-60 overflow-y-auto">
+            {savedConfigs.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>No saved configs.</div>
+            ) : (
+              savedConfigs.map(cfg => (
+                <div key={cfg.id} className="flex items-center gap-1"
+                  style={{ padding: '3px 0', borderBottom: '1px solid var(--panel-border)' }}>
+                  <span style={{ flex: 1, fontSize: 11, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cfg.name}
+                    <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>{cfg.steps.length} steps</span>
+                  </span>
+                  <Button size="sm" onClick={() => { onLoadConfig(cfg.id); setOpen(false); }}
+                    style={{ background: 'var(--accent-green-bg)', border: '1px solid var(--accent-green-border)', color: 'var(--accent-green)', fontSize: 10 }}>
+                    Load
+                  </Button>
+                  <Button size="sm" onClick={() => onExportConfig(cfg.id)}
+                    style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-muted)', fontSize: 10 }}>
+                    <HugeiconsIcon icon={Download01Icon} size={10} />
+                  </Button>
+                  <Button size="sm" onClick={() => onDeleteConfig(cfg.id)}
+                    style={{ background: 'var(--accent-red-bg)', border: '1px solid var(--accent-red-border)', color: 'var(--accent-red)', fontSize: 10 }}>
+                    <HugeiconsIcon icon={Delete01Icon} size={10} />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

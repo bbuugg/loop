@@ -11,9 +11,9 @@
   --panel-surface: #ffffff;
   --panel-border: rgba(0,0,0,0.08);
   --panel-border-strong: rgba(0,0,0,0.14);
-  --panel-item-bg: rgba(0,0,0,0.04);
-  --panel-item-bg-hover: rgba(0,0,0,0.07);
-  --panel-item-border: rgba(0,0,0,0.09);
+  --panel-item-bg: #ffffff;
+  --panel-item-bg-hover: rgba(0,0,0,0.04);
+  --panel-item-border: rgba(0,0,0,0.12);
 
   --text-primary: rgba(0,0,0,0.88);
   --text-secondary: rgba(0,0,0,0.5);
@@ -145,6 +145,12 @@ body {
   to { transform: rotate(360deg); }
 }
 .spin { animation: spin 0.8s linear infinite; display: inline-block; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.pulse-dot { animation: pulse-dot 0.9s ease-in-out infinite; }
 
 .dark {
   --background: oklch(0.145 0 0);

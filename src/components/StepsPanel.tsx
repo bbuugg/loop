@@ -1,134 +1,112 @@
 import React, { useState } from 'react';
 import { STEP_SCHEMA, stepSummary, type Step } from '../schema';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { HugeiconsIcon } from '@hugeicons/react';
 import {
   PlayIcon, PencilEdit01Icon, Delete01Icon, Copy01Icon,
-  ArrowUp01Icon, ArrowDown01Icon, EyeIcon, EyeOff as EyeOffIcon, AddCircleIcon,
+  EyeIcon, EyeOff as EyeOffIcon, AddCircleIcon, ArrowDown01Icon, RefreshIcon,
 } from '@hugeicons/core-free-icons';
 import { cn } from '@/lib/utils';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-const STEP_TYPES = Object.keys(STEP_SCHEMA);
+// Step types shown in add menu (excludes internal/container sub-types)
+const ADD_STEP_TYPES = Object.keys(STEP_SCHEMA).filter(t => t !== 'loop' && t !== 'ifVar'
+  ? true : true); // all types shown; loop/ifVar are containers
 
 const TYPE_ICON: Record<string, string> = {
   navigate: '🌐', refresh: '↺', waitElement: '⏳', hover: '🖱',
   click: '👆', type: '⌨', extract: '📤', setVar: '📝',
   scroll: '↕', waitMs: '⏱', screenshot: '📸',
+  loop: '⟳', ifVar: '⑂',
 };
 
-interface Props {
-  steps: Step[];
-  stepStates: Record<number, 'running'|'done'|'error'|'skip'|null>;
-  onAdd: (type: string) => void;
-  onEdit: (i: number) => void;
-  onDelete: (i: number) => void;
-  onMove: (i: number, dir: -1|1) => void;
-  onDuplicate: (i: number) => void;
-  onRunOne: (i: number) => void;
-  onToggleDisabled: (i: number) => void;
-  onInsert: (i: number, type: string) => void;
+interface TreeCallbacks {
+  onAdd: (type: string, parentPath?: number[], branch?: 'children'|'elseChildren') => void;
+  onEdit: (path: number[]) => void;
+  onDelete: (path: number[]) => void;
+  onDuplicate: (path: number[]) => void;
+  onRunOne: (path: number[]) => void;
+  onToggleDisabled: (path: number[]) => void;
+  onReorder: (parentPath: number[], branch: 'children'|'elseChildren', newArr: Step[]) => void;
 }
 
-export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete, onMove, onDuplicate, onRunOne, onToggleDisabled, onInsert }: Props) {
-  const [insertingAt, setInsertingAt] = useState<number | null>(null);
+interface Props extends TreeCallbacks {
+  steps: Step[];
+  stepStates: Record<string, 'running'|'done'|'error'|'skip'|null>;
+  onClearSteps: () => void;
+  onResetStates: () => void;
+  running?: boolean;
+}
+
+export default function StepsPanel({ steps, stepStates, onClearSteps, onResetStates, running, ...callbacks }: Props) {
   const [addOpen, setAddOpen] = useState(false);
+  const [addTarget, setAddTarget] = useState<{ parentPath?: number[]; branch?: 'children'|'elseChildren' } | null>(null);
+
+  function openAdd(parentPath?: number[], branch?: 'children'|'elseChildren') {
+    setAddTarget({ parentPath, branch });
+    setAddOpen(true);
+  }
+
+  function handleAdd(type: string) {
+    callbacks.onAdd(type, addTarget?.parentPath, addTarget?.branch);
+    setAddOpen(false);
+    setAddTarget(null);
+  }
 
   return (
     <div className="flex flex-col flex-shrink-0 overflow-hidden min-h-0" style={{ width: '260px', borderRight: '1px solid var(--panel-border)', background: 'var(--panel-surface)' }}>
-
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 flex-shrink-0" style={{ borderBottom: '1px solid var(--panel-border)' }}>
         <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Steps</span>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--panel-item-bg)', color: 'var(--text-muted)' }}>{steps.length}</span>
-          <Button variant="ghost" size="icon" className="w-5 h-5" onClick={() => setAddOpen(true)} title="Add step">
+          <Button variant="ghost" size="icon" className="w-5 h-5" onClick={onResetStates} disabled={running} title="Reset step states">
+            <HugeiconsIcon icon={RefreshIcon} size={13} />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-5 h-5" onClick={onClearSteps} disabled={running} title="Clear steps">
+            <HugeiconsIcon icon={Delete01Icon} size={13} />
+          </Button>
+          <Button variant="ghost" size="icon" className="w-5 h-5" onClick={() => openAdd()} title="Add step">
             <HugeiconsIcon icon={AddCircleIcon} size={13} />
           </Button>
         </div>
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-        <div className="flex flex-col gap-1 p-1.5 w-full min-w-0">
-          {steps.length === 0 && (
-            <div className="text-center py-8 text-[11px]" style={{ color: 'var(--text-muted)' }}>No steps</div>
-          )}
-          {insertingAt === 0 && (
-            <InsertPicker index={0} onInsert={onInsert} onClose={() => setInsertingAt(null)} />
-          )}
-          {steps.map((step, i) => {
-            const schema  = STEP_SCHEMA[step.type] || { label: step.type };
-            const summary = stepSummary(step);
-            const state   = stepStates[i];
-            return (
-              <React.Fragment key={i}>
-              <div
-                className={cn('group flex flex-col rounded-xl px-2.5 py-2 cursor-pointer transition-all min-w-0 overflow-hidden', step.disabled && 'opacity-40')}
-                style={{
-                  background: state === 'running' ? 'var(--accent-blue-bg)'
-                    : state === 'done'    ? 'rgba(52,211,153,0.08)'
-                    : state === 'error'   ? 'var(--accent-danger-bg)'
-                    : 'var(--panel-item-bg)',
-                  border: `1px solid ${
-                    state === 'running' ? 'var(--accent-blue-border)'
-                    : state === 'done'  ? 'rgba(52,211,153,0.3)'
-                    : state === 'error' ? 'var(--accent-danger-border)'
-                    : 'var(--panel-item-border)'}`,
-                }}
-                onDoubleClick={() => onEdit(i)}>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] w-4 text-center flex-shrink-0" style={{ color: 'var(--text-muted)' }}>{i+1}</span>
-                  <span className="text-[11px]">{TYPE_ICON[step.type] || '•'}</span>
-                  <span className="text-[11px] font-medium truncate flex-1" style={{ color: 'var(--text-primary)' }}>{step.name || schema.label}</span>
-                  {state === 'running' && <span className="text-[10px]" style={{ color: 'var(--accent-blue)' }}>▶</span>}
-                  {state === 'done'    && <span className="text-[10px]" style={{ color: 'var(--accent-ok)' }}>✓</span>}
-                  {state === 'error'   && <span className="text-[10px]" style={{ color: 'var(--accent-danger)' }}>✗</span>}
-                </div>
-
-                {summary && (
-                  <div className="text-[10px] mt-0.5 truncate pl-7" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{summary}</div>
-                )}
-
-                {/* Action buttons — show on hover */}
-                <div className="flex items-center gap-0.5 rounded-lg px-1 py-0.5 mt-0 flex-wrap w-full opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity duration-100"
-                  style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)' }}>
-                  <IconBtn title="Insert before" onClick={() => setInsertingAt(i)}>↑+</IconBtn>
-                  <IconBtn title="Insert after" onClick={() => setInsertingAt(i + 1)}>↓+</IconBtn>
-                  <IconBtn title="Run" onClick={() => onRunOne(i)}><HugeiconsIcon icon={PlayIcon} size={10} /></IconBtn>
-                  <IconBtn title="Edit" onClick={() => onEdit(i)}><HugeiconsIcon icon={PencilEdit01Icon} size={10} /></IconBtn>
-                  <IconBtn title="Duplicate" onClick={() => onDuplicate(i)}><HugeiconsIcon icon={Copy01Icon} size={10} /></IconBtn>
-                  <IconBtn title="Move up" onClick={() => onMove(i, -1)}><HugeiconsIcon icon={ArrowUp01Icon} size={10} /></IconBtn>
-                  <IconBtn title="Move down" onClick={() => onMove(i, 1)}><HugeiconsIcon icon={ArrowDown01Icon} size={10} /></IconBtn>
-                  <IconBtn title={step.disabled ? 'Enable' : 'Disable'} onClick={() => onToggleDisabled(i)}>
-                    {step.disabled ? <HugeiconsIcon icon={EyeIcon} size={10} /> : <HugeiconsIcon icon={EyeOffIcon} size={10} />}
-                  </IconBtn>
-                  <IconBtn title="Delete" onClick={() => onDelete(i)} danger><HugeiconsIcon icon={Delete01Icon} size={10} /></IconBtn>
-                </div>
-              </div>
-              {insertingAt === i + 1 && (
-                <InsertPicker index={i + 1} onInsert={onInsert} onClose={() => setInsertingAt(null)} />
-              )}
-              </React.Fragment>
-            );
-          })}
-        </div>
+      {/* Tree */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-1.5">
+        {steps.length === 0 && (
+          <div className="text-center py-8 text-[11px]" style={{ color: 'var(--text-muted)' }}>No steps</div>
+        )}
+        <StepList
+          steps={steps}
+          path={[]}
+          branch="children"
+          stepStates={stepStates}
+          callbacks={callbacks}
+          onOpenAdd={openAdd}
+        />
       </div>
 
+      {/* Add dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Add Step</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-1.5 pt-1">
-            {STEP_TYPES.map(type => (
-              <Button key={type} size="sm" variant="outline" onClick={() => { onAdd(type); setAddOpen(false); }}
+            {ADD_STEP_TYPES.map(type => (
+              <Button key={type} size="sm" variant="outline" onClick={() => handleAdd(type)}
                 className="justify-start text-[11px] h-8 px-2.5">
                 <span>{TYPE_ICON[type] || '•'}</span>
-                <span className="truncate">{STEP_SCHEMA[type].label}</span>
+                <span className="ml-1.5 truncate">{STEP_SCHEMA[type]?.label || type}</span>
               </Button>
             ))}
           </div>
@@ -138,21 +116,160 @@ export default function StepsPanel({ steps, stepStates, onAdd, onEdit, onDelete,
   );
 }
 
-function InsertPicker({ index, onInsert, onClose }: { index: number; onInsert: (i: number, type: string) => void; onClose: () => void }) {
+function StepList({
+  steps, path, branch, stepStates, callbacks, onOpenAdd
+}: {
+  steps: Step[];
+  path: number[];
+  branch: 'children'|'elseChildren';
+  stepStates: Record<string, string|null>;
+  callbacks: TreeCallbacks;
+  onOpenAdd: (parentPath?: number[], branch?: 'children'|'elseChildren') => void;
+}) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = steps.findIndex(s => s.id === active.id);
+    const newIndex = steps.findIndex(s => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    callbacks.onReorder(path, branch, arrayMove(steps, oldIndex, newIndex));
+  }
+
+  const ids = steps.map(s => s.id || s.type);
+
   return (
-    <div className="rounded-xl p-2" style={{ background: 'var(--accent-blue-bg)', border: '1px solid var(--accent-blue-border)' }}>
-      <div className="text-[9px] uppercase tracking-widest mb-1 px-0.5" style={{ color: 'var(--text-muted)' }}>Insert at position {index + 1}</div>
-      <div className="grid grid-cols-2 gap-1">
-        {Object.keys(STEP_SCHEMA).map(type => (
-          <Button key={type} size="sm" onClick={() => { onInsert(index, type); onClose(); }}
-            className="justify-start text-[10px] h-6 px-2"
-            style={{ background: 'var(--panel-item-bg)', border: '1px solid var(--panel-item-border)', color: 'var(--text-secondary)' }}>
-            <span>{TYPE_ICON[type] || '•'}</span>
-            <span className="truncate">{STEP_SCHEMA[type].label}</span>
-          </Button>
-        ))}
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <div className="flex flex-col gap-1">
+          {steps.map((step, i) => (
+            <SortableStepNode
+              key={step.id || i}
+              step={step}
+              path={[...path, i]}
+              stepStates={stepStates}
+              callbacks={callbacks}
+              onOpenAdd={onOpenAdd}
+            />
+          ))}
+          {/* Add inside this container */}
+          {path.length > 0 && (
+            <button
+              onClick={() => onOpenAdd(path, branch)}
+              className="text-[9px] rounded px-2 py-0.5 mt-0.5 text-left opacity-40 hover:opacity-80"
+              style={{ color: 'var(--text-muted)', border: '1px dashed var(--panel-border)' }}
+            >+ add step</button>
+          )}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
+function SortableStepNode({ step, path, stepStates, callbacks, onOpenAdd }: {
+  step: Step;
+  path: number[];
+  stepStates: Record<string, string|null>;
+  callbacks: TreeCallbacks;
+  onOpenAdd: (parentPath?: number[], branch?: 'children'|'elseChildren') => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: step.id || step.type });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+  const [collapsed, setCollapsed] = useState(false);
+  const isContainer = STEP_SCHEMA[step.type]?.isContainer;
+  const state = step.id ? stepStates[step.id] : null;
+
+  const stateStyles: Record<string, { bg: string; border: string; dot: string; textColor?: string }> = {
+    running: { bg: 'rgba(245,158,11,0.12)', border: '#f59e0b', dot: '#f59e0b' },
+    done:    { bg: 'rgba(34,197,94,0.08)',  border: '#22c55e', dot: '#22c55e' },
+    error:   { bg: 'rgba(239,68,68,0.12)',  border: '#ef4444', dot: '#ef4444', textColor: '#ef4444' },
+    skip:    { bg: 'transparent',           border: 'var(--panel-item-border)', dot: 'var(--text-muted)' },
+  };
+  const ss = state ? stateStyles[state] : null;
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {/* Step row */}
+      <div
+        className={cn('flex items-center gap-1 rounded-lg px-1.5 py-1 group', (step.disabled || state === 'skip') && 'opacity-40')}
+        style={{
+          background: ss?.bg ?? 'var(--panel-item-bg)',
+          border: `1px solid ${ss?.border ?? 'var(--panel-item-border)'}`,
+          minHeight: '28px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Running left accent bar */}
+        {state === 'running' && (
+          <span className="pulse-dot" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#f59e0b', borderRadius: '4px 0 0 4px', display: 'block' }} />
+        )}
+        {/* State dot */}
+        {state && state !== 'skip' && (
+          <span className={state === 'running' ? 'pulse-dot' : ''} style={{ width: 6, height: 6, borderRadius: '50%', background: ss!.dot, flexShrink: 0, display: 'inline-block', marginLeft: state === 'running' ? 4 : 0 }} />
+        )}
+        {/* Drag handle */}
+        <span {...attributes} {...listeners} className="cursor-grab text-[10px] opacity-30 hover:opacity-60 select-none flex-shrink-0">⠿</span>
+
+        {/* Collapse toggle for containers */}
+        {isContainer && (
+          <button onClick={() => setCollapsed(c => !c)} className="flex-shrink-0 opacity-50 hover:opacity-100">
+            <HugeiconsIcon icon={ArrowDown01Icon} size={9} style={{ transform: collapsed ? 'rotate(-90deg)' : undefined }} />
+          </button>
+        )}
+
+        {/* Icon + label */}
+        <span className="flex-shrink-0 text-[11px]">{TYPE_ICON[step.type] || '•'}</span>
+        <span className="flex-1 text-[10px] truncate min-w-0" style={{ color: ss?.textColor ?? (step.disabled ? 'var(--text-muted)' : 'var(--text-primary)'), fontWeight: state === 'running' ? 600 : undefined, textDecoration: state === 'skip' ? 'line-through' : undefined }}>
+          {step.name || STEP_SCHEMA[step.type]?.label || step.type}
+          {stepSummary(step) ? <span className="opacity-50 ml-1">{stepSummary(step)}</span> : null}
+        </span>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0">
+          <IconBtn title="Run" onClick={() => callbacks.onRunOne(path)}><HugeiconsIcon icon={PlayIcon} size={9} /></IconBtn>
+          <IconBtn title="Edit" onClick={() => callbacks.onEdit(path)}><HugeiconsIcon icon={PencilEdit01Icon} size={9} /></IconBtn>
+          <IconBtn title="Duplicate" onClick={() => callbacks.onDuplicate(path)}><HugeiconsIcon icon={Copy01Icon} size={9} /></IconBtn>
+          <IconBtn title={step.disabled ? 'Enable' : 'Disable'} onClick={() => callbacks.onToggleDisabled(path)}>
+            {step.disabled ? <HugeiconsIcon icon={EyeIcon} size={9} /> : <HugeiconsIcon icon={EyeOffIcon} size={9} />}
+          </IconBtn>
+          <IconBtn title="Delete" onClick={() => callbacks.onDelete(path)} danger>
+            <HugeiconsIcon icon={Delete01Icon} size={9} />
+          </IconBtn>
+        </div>
       </div>
-      <Button variant="ghost" size="sm" onClick={onClose} className="mt-1 text-[9px] w-full" style={{ color: 'var(--text-muted)' }}>cancel</Button>
+
+      {/* Children (loop body / ifVar then) */}
+      {isContainer && !collapsed && (
+        <div className="ml-4 mt-1 mb-1" style={{ borderLeft: '2px solid var(--panel-border)', paddingLeft: '6px' }}>
+          {step.type === 'ifVar' && (
+            <div className="text-[9px] uppercase tracking-widest mb-0.5 px-0.5 opacity-50">then</div>
+          )}
+          <StepList
+            steps={step.children || []}
+            path={path}
+            branch="children"
+            stepStates={stepStates}
+            callbacks={callbacks}
+            onOpenAdd={onOpenAdd}
+          />
+          {step.type === 'ifVar' && (
+            <>
+              <div className="text-[9px] uppercase tracking-widest mt-1.5 mb-0.5 px-0.5 opacity-50">else</div>
+              <StepList
+                steps={step.elseChildren || []}
+                path={path}
+                branch="elseChildren"
+                stepStates={stepStates}
+                callbacks={callbacks}
+                onOpenAdd={onOpenAdd}
+              />
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -161,17 +278,13 @@ function IconBtn({ title, onClick, danger, children }: { title: string; onClick:
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={e => { e.stopPropagation(); onClick(); }}
-          className="w-5 h-5"
-          style={{ color: danger ? 'var(--accent-danger)' : 'var(--text-secondary)' }}
-        >
-          {children}
-        </Button>
+        <button
+          onClick={onClick}
+          className={cn('w-5 h-5 flex items-center justify-center rounded hover:bg-white/10', danger && 'hover:text-red-400')}
+          style={{ color: danger ? undefined : 'var(--text-muted)' }}
+        >{children}</button>
       </TooltipTrigger>
-      <TooltipContent><p>{title}</p></TooltipContent>
+      <TooltipContent side="top" className="text-[10px] px-1.5 py-0.5">{title}</TooltipContent>
     </Tooltip>
   );
 }
